@@ -35,8 +35,8 @@ def create_relationships_with_events(session, student_node):
     for event_id in event_ids:
         # Create a relationship between the Student node and the Club node
         result=session.run(
-            "MATCH (s:Student {StudentId: $student_id}), (c:Event {EventId: $event_id}) "
-            "MERGE (s)-[:DIRECT]-(c)",
+            "MATCH (s:Student {StudentId: $student_id}), (e:Event {EventId: $event_id}) "
+            "MERGE (s)-[:DIRECT{rating:e.EventRating}]-(e)",
             student_id=student_node["StudentId"].strip(),
             event_id=event_id.strip()
         )
@@ -68,18 +68,67 @@ def compareEvents(session,event1Id,event2Id,store):
     #Compare events
     score=1 if events[0]['ClubId']==events[1]['ClubId'] else 0  #Check if they are hosted by same club
     #Find degrees of both events(popularity)
-    temp=[]
-    result=session.run("MATCH (e:Event)-[:DIRECT]-(:Student) "
+    rel=[{'r':[],'s':{}},{'r':[],'s':{}}]
+    #OPTIMIZE Reduce number of queries
+    #Get the relationships between students and events
+    result=session.run("MATCH (e:Event)-[r:DIRECT]-(s:Student) "
                        "WHERE e.EventId=$event1Id "
-                       "RETURN COUNT(e)",
+                       "RETURN r,s",
                        event1Id=event1Id)
-    temp.append(float(result.single().value()))
-    result=session.run("MATCH (e:Event)-[:DIRECT]-(:Student) "
+    '''
+    PROTOTYPE rel
+    {
+        #Event1
+        [
+            'r':{
+                [Relationship1,Relationship2,...]
+            },
+            's':{
+                CommonStudentId1:RatingEvent1,
+                ...
+            }
+        ],
+        #Event2
+        [
+            'r':{
+                [Relationship1,Relationship2,...]
+            },
+            's':{
+                CommonStudentId1:Rating1Event2,
+                ...
+            }
+        ]
+    }
+    Relationship: Student-ATTENDED->Event
+    '''
+    for record in result:
+        rel[0]['r'].append(record["r"])
+        rel[0]['s'][record["r"].nodes[0]['StudentId']]=float(record["r"]['rating'])   #Store the student IDs as keys and their ratings as vals. in dict.
+    result=session.run("MATCH (e:Event)-[r:DIRECT]-(s:Student) "
                        "WHERE e.EventId=$event2Id "
-                       "RETURN COUNT(e)",
+                       "RETURN r,s",
                        event2Id=event2Id)
-    temp.append(float(result.single().value()))
-    score+=1 if temp[0]==temp[1] else 1/abs(temp[0]-temp[1])    #Find diff. in popularity
+    for record in result:
+        rel[1]['r'].append(record["r"])
+        rel[1]['s'][record["r"].nodes[0]['StudentId']]=float(record["r"]['rating'])
+    #Convert the list of student IDs(keys of dict.) to set of student IDs to carry out UNION and INTERSECTION ops.
+    temp1=set(rel[0]['s'].keys())
+    temp2=set(rel[1]['s'].keys())
+    commonStudents=temp1 & temp2
+    temp=0
+    '''
+    Find out the difference in how each student who has attended both the events has rated them
+    1) Both events are liked by students: events are similar
+    2) Both events are disliked by students: events are similar
+    3) One event is liked and one disliked: events are dissimilar
+    '''
+    #CHECK
+    for student in commonStudents:
+        temp+=1 if rel[0]['s'][student]==rel[1]['s'][student] else 1/abs(rel[0]['s'][student]-rel[1]['s'][student])
+    score+=temp/len(temp1 | temp2)  #Normalize wrt the number of students who has attended either event
+    temp1=len(rel[0]['r'])
+    temp2=len(rel[1]['r'])
+    score+=1 if temp1==temp2 else 1/abs(temp1-temp2)    #Find diff. in popularity
     #FIXME EventRating NULL for some Events
     temp=abs(float(events[0]['EventRating'])-float(events[1]['EventRating'])) #Find out diff. in avg. rating
     score+=1 if temp<1 else 1/temp  #TODO Factor in number of people who have given rating
@@ -94,7 +143,7 @@ def compareEvents(session,event1Id,event2Id,store):
                 temp+=1
     temp1=set(events[0]['EventType'])
     temp2=set(events[1]['EventType'])
-    score+=len(temp1 & temp2)/len(temp1 | temp2)    #Ration of common event types to all event types
+    score+=len(temp1 & temp2)/len(temp1 | temp2)    #Ratio of common event types to all event types
     score/=5  #Normalize wrt number of event properties compared
     #Store the calculated similarity score in the relationship
     if store:
