@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Graph Visualization</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    .selected {
+      fill: red;
+    }
+    html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Hide overflow */
+}
+svg {
+  box-sizing: border-box;
+  background-color: black;
+  padding:10px;
+}
+.tooltip {
+  position: absolute;
+  background-color:#1e1e1e;
+  color: #fff;
+  opacity: 0;
+  font-family: 'Trebuchet MS';
+  padding: 15px;
+  font-size: 14px;
+  box-shadow: 0px 0px 25px 5px black;
+}
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <div class="tooltip" id="node-tooltip"></div>
+  <script>
+    //var screenWidth = document.documentElement.clientWidth;
+    //var screenHeight = document.documentElement.scrollHeight;
+    var screenWidth=window.innerWidth;
+    var screenHeight=window.innerHeight;
+    var isDragging = false; // Flag to track whether a node is being dragged
+    var tooltipTimeout;
+    // Function to load and use the local JSON data
+    function loadJSON(callback) {
+      // Fetch the local JSON file
+      fetch('./graph_data_sample1.json')
+        .then(response => response.json())
+        .then(data => callback(data))
+        .catch(error => console.error('Error fetching JSON:', error));
+    }
+
+    // Call the loadJSON function to fetch the local data
+    loadJSON(function (graphData) {
+      // Specify the color scale.
+      const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // The force simulation mutates links and nodes, so create a copy
+    // so that re-evaluating this cell produces the same result.
+    const links = graphData.links.map(d => ({...d}));
+    const nodes = graphData.nodes.map(d => ({...d}));
+    nodes.forEach(function (node) {
+        node.x = Math.random() * screenWidth;
+        node.y = Math.random() * screenHeight;
+    });
+      var svg = d3.select("svg");
+      var aspectRatio=screenHeight/screenWidth;
+      var bounceStrength=1;
+      const simulation = d3.forceSimulation(nodes);
+      // Function to update SVG dimensions based on screen size
+  function updateSvgDimensions(initial) {
+    //screenWidth = document.documentElement.clientWidth;
+    //screenHeight = document.documentElement.scrollHeight;
+    var screenWidth=window.innerWidth;
+    var screenHeight=window.innerHeight;
+    aspectRatio=screenHeight/screenWidth;
+    // Update the dimensions of the SVG container
+    svg.attr("width", screenWidth).attr("height", screenHeight);
+    if(!initial){
+    // Update any other elements that depend on screen dimensions
+    // For example, you might want to update the force center:
+    simulation.force("charge", d3.forceManyBody()
+                .strength(d=>{
+                  // Check if all nodes have been added
+                  const numNodesInData = graphData.nodes.length;
+                  const numNodesInSimulation = simulation.nodes().length;
+
+                  if (numNodesInData !== numNodesInSimulation) {
+                    return 0;
+                  }
+                  if (d.y < 0 || d.y > screenHeight) {
+                    return 0;
+                  }
+                  if (d.x < 0 || d.x > screenWidth) {
+                    return 0;
+                  }
+                  return -300;
+                })
+                .distanceMin(20)
+                .distanceMax(100)
+            );
+    }
+    // Restart the simulation to apply the changes
+    simulation.alpha(1).restart();
+  }
+      // Set initial dimensions
+      updateSvgDimensions(true);
+      // Handle window resize events
+      window.addEventListener("resize", function(){updateSvgDimensions(false);});
+      // Create a simulation with several forces.
+      simulation.on("tick",ticked);
+     // Add a line for each link, and a circle for each node.
+        const node = svg.append("g")
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 1.5)
+            .selectAll()
+            .data(nodes)
+            .join("circle")
+            .attr("r", 5)
+            .attr("cx",function(d){return d.x})
+            .attr("cy",function(d){return d.y})
+            .attr("fill", function(d){
+              if("EventRating" in d){
+                return "green";
+              }
+              if("Campus" in d){
+              return "red";}
+            })
+            .style("opacity",0.5)
+            .on("mouseenter", showTooltip)
+            .on("mouseleave", hideTooltip)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        node.append("title")
+            .text(d => d.id);
+        const link = svg.append("g")
+            .attr("stroke", "#999")
+            .attr("stroke-opacity", 0.6)
+            .selectAll()
+            .data(links)
+            .join("line")
+            .attr("stroke-width", d => Math.sqrt(d.value));
+        simulation.force("link", d3.forceLink(links).id(d => d.id))
+            .force("charge", d3.forceManyBody()
+                .strength(d=>{
+                  // Check if all nodes have been added
+                  const numNodesInData = graphData.nodes.length;
+                  const numNodesInSimulation = simulation.nodes().length;
+
+                  if (numNodesInData !== numNodesInSimulation) {
+                    return 0;
+                  }
+                  if (d.y < 0 || d.y > screenHeight) {
+                    return 0;
+                  }
+                  if (d.x < 0 || d.x > screenWidth) {
+                    return 0;
+                  }
+                  return -300
+                })
+                .distanceMin(20)
+                .distanceMax(100)
+            )
+            .force("xBounce", d3.forceX()
+              .strength(d => {
+                // Apply a force towards the center when nodes approach the left or right edges
+                if (d.x <= 0){
+                  return bounceStrength;
+                }
+                if(d.x >= screenWidth) {
+                  return -bounceStrength;
+                }
+                return 0;
+              })
+              .x(screenWidth / 2)) // Horizontal bounce force
+      .force("yBounce", d3.forceY()
+                .strength(d => {
+                  // Apply a force towards the center when nodes approach the top or bottom edges
+                  if (d.y <= 0){
+                    return bounceStrength/Math.pow(aspectRatio,1);
+                  }
+                  if(d.y >= screenHeight) {
+                    return -bounceStrength/Math.pow(aspectRatio,1);
+                  }
+                  return 0;
+                })
+                .y(screenHeight / 2)); // Vertical bounce force
+        // Start the simulation with a small alpha
+      simulation.alpha(1).alphaDecay(0.02).restart(); 
+        // Set the position attributes of links and nodes each time the simulation ticks.
+        function ticked() {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            node
+                .attr("cx", d => Math.max(20, Math.min(screenWidth - 20, d.x)))
+                .attr("cy", d => Math.max(20, Math.min(screenHeight - 20, d.y)));
+        }
+
+        // Reheat the simulation when drag starts, and fix the subject position.
+        function dragstarted(event) {
+            isDragging=true;
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+        }
+
+        // Update the subject (dragged node) position during drag.
+        function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+        }
+
+        // Restore the target alpha so the simulation cools after dragging ends.
+        // Unfix the subject position now that it’s no longer being dragged.
+        function dragended(event) {
+          isDragging=false;
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        }
+        var selectedNodes=[];
+        function showTooltip(event, d) {
+          if(!isDragging)
+          {
+            var elem=d3.select(this)
+            elem.style("opacity",1)
+          .style("stroke-width",4)
+          .transition()
+          .attr("r",8);
+            // Get the tooltip element
+            var neighbours = [];
+            console.log(graphData);
+            for(x in graphData.links)
+            {
+              console.log(x);
+              if(x.source.id === d.id){
+                neighbours.push(x.target.id);
+              }
+            }
+            // Select nodes by their IDs or labels
+            selectedNodes = svg.selectAll("circle")
+              .filter(d => nodeIdsToSelect.includes(d.id));
+            selectedNodes.style("opacity",1)
+          .style("stroke-width",4)
+          .transition()
+          .attr("r",8);
+            var tooltip = d3.select("#node-tooltip");
+
+            // Clear the previous tooltip content
+            tooltip.html("");
+
+            // Iterate over the properties of the node's data object
+            for (var key in d) {
+              if (d.hasOwnProperty(key)) {
+                // Create a <div> element for each feature and add it to the tooltip
+                var featureDiv = tooltip.append("div");
+                featureDiv.html("<strong>" + key + ":</strong> " + d[key]);
+              }
+            }
+
+            var tooltipWidth = tooltip.node().getBoundingClientRect().width;
+            var tooltipHeight = tooltip.node().getBoundingClientRect().height;
+            var xPosition = 5; // Default x position
+            var yPosition = 5; // Default y position
+
+            // Check if node lies on the left half of the window
+            if (d.x < screenWidth/2) {
+              xPosition = screenWidth-tooltipWidth-5; // Display on the left
+            }
+
+            // Check if node lies in the top half of the window
+            if (d.y < screenHeight/2) {
+              yPosition = screenHeight-tooltipHeight-5; // Display on the top
+            }
+            tooltip.style("left", xPosition + "px")
+                  .style("top", yPosition + "px")
+                  .transition()
+                  .style("opacity", 1);
+          }
+      }
+
+      function hideTooltip() {
+        d3.select(this).style("opacity",0.5).style("stroke-width",1.5)
+        .transition()
+        .attr("r",5);
+          // Hide the tooltip on mouseleave
+          d3.select("#node-tooltip").transition().style("opacity", 0);
+      }
+    });
+  </script>
+</body>
+</html>
