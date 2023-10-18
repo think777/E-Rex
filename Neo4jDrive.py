@@ -33,13 +33,15 @@ def create_relationships_with_events(session, student_node):
     event_ids=event_ids[1:-1].split(',')
     # Loop through each club name and create relationships
     for event_id in event_ids:
-        # Create a relationship between the Student node and the Club node
+        # Create a relationship between the Student node and the Event node
         result=session.run(
             "MATCH (s:Student {StudentId: $student_id}), (e:Event {EventId: $event_id}) "
-            "MERGE (s)-[:DIRECT{rating:e.EventRating}]-(e)",
+            "MERGE (s)-[:DIRECT{rating:e.EventRating}]-(e) ",
+            "MERGE (s)-[:INDIRECT]-(e) ",
             student_id=student_node["StudentId"].strip(),
             event_id=event_id.strip()
         )
+        #CHECK
 
 def returnMetapaths(session,studentName,metapath):
     query=f"""
@@ -55,6 +57,7 @@ def returnMetapaths(session,studentName,metapath):
         paths.append(record['path'])
     return paths
 
+#OPTIMIZE Add model to calculate agg. score
 def compareEvents(session,event1Id,event2Id,store):
     #Get Event nodes
     result=session.run("MATCH (n:Event) "
@@ -155,6 +158,48 @@ def compareEvents(session,event1Id,event2Id,store):
                     score=score)
     return score
 
+#OPTIMIZE Add model to calculate agg. score
+def compareStudents(session,studentId1,studentId2,store):
+    score=0
+    query=f"""
+        MATCH (s1:Student {{StudentId:$studentId1}}),(s2:Student {{StudentId:$studentId2}})
+        RETURN s1,s2
+        """
+    result=session.run(query,studentId1=studentId1,studentId2=studentId2)
+    students=result.single()
+    score+=1 if students["s1"]["Branch"]==students["s2"]["Branch"] else 0   #Check whether students belong to same branch
+    score+=1 if students["s1"]["Semester"]==students["s2"]["Semester"] else 0   #Check whether students belong to the same semester
+    temp1=set(students["s1"]["ClubName"])
+    temp2=set(students["s2"]["ClubName"])
+    score+=len(temp1 & temp2)/len(temp1 | temp2)    #Find the ratio of common clubs to all clubs they are members of
+    temp1=float(students["s1"]["CGPA"])
+    temp2=float(students["s2"]["CGPA"])
+    score+=1 if round(temp1,1)==round(temp2,1) else 1/abs(temp1-temp2)  #Find similarity in students' CGPAs
+    #Find common events attended by student1 and student2
+    query=f"""
+        MATCH (s1:Student {{StudentId:$studentId1}})-[r1:DIRECT]-(:Event)-[r2:DIRECT]-(s2:Student {{StudentId:$studentId2}})
+        RETURN r1,r2
+    """
+    result=session.run(query,studentId1=studentId1,studentId2=studentId2)
+    temp=0
+    '''
+    Find out the difference in how each student who has attended both the events has rated them
+    1) An event is liked by both students: students' interests are similar
+    2) An event is disliked by both students: students' interests are similar
+    3) An event is liked by one student and disliked by the other: students' interests are dissimilar
+    '''
+    for record in result:
+        temp+=1 if record["r1"]["rating"]==record["r2"]["rating"] else 1/abs(record["r1"]["rating"]-record["r2"]["rating"])
+    score+=temp/len(set(students["s1"]["EventId"]) | set(students["s2"]["EventId"]))
+    score/=5    #Normalize score wrt number of properties considered
+    if(store):
+        query=f"""
+            MATCH (s1:Student {{StudentId:$studentId1}}), (s2:Student {{StudentId:$studentId2}})
+            MERGE (s1)-[:STUDENT_SIMILARITY{{score:$score}}]-(s2)
+        """
+        session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
+    return score
+
 def analyzeNeighbourhood(session,studentName):
     studentName=studentName.strip()
     result=session.run("MATCH (n:Student) "
@@ -229,7 +274,8 @@ def main():
                                 eventId=eventId,
                                 randVal=temp)
                 '''
-                print(compareEvents(session,'6781','7856',True))
+                #compareEvents(session,'6781','7856',True)
+                compareStudents(session,'4','583',True)
 
     except exceptions.Neo4jError as e:
         print("Neo4j error:", e)
