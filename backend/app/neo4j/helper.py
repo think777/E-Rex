@@ -68,6 +68,8 @@ def compareEvents(session,event1Id,event2Id,store):
     events=[]
     for record in result:
         events.append(record['n'])
+    if(len(events)!=2):
+        return None
     #Compare events
     score=1 if events[0]['ClubId']==events[1]['ClubId'] else 0  #Check if they are hosted by same club
     #Find degrees of both events(popularity)
@@ -167,6 +169,8 @@ def compareStudents(session,studentId1,studentId2,store):
         """
     result=session.run(query,studentId1=studentId1,studentId2=studentId2)
     students=result.single()
+    if(students is None):
+        return None
     score+=1 if students["s1"]["Branch"]==students["s2"]["Branch"] else 0   #Check whether students belong to same branch
     score+=1 if students["s1"]["Semester"]==students["s2"]["Semester"] else 0   #Check whether students belong to the same semester
     temp1=set(students["s1"]["ClubName"])
