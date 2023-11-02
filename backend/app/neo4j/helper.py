@@ -204,6 +204,43 @@ def compareStudents(session,studentId1,studentId2,store):
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
+def studentEventSim(session,studentId,eventId,store):
+    query=f"""
+    MATCH (s:Student {{StudentId:$studentId}})-[r:DIRECT|INDIRECT]-(e:Event {{EventId:$eventId}})
+    RETURN r
+    """
+    result=session.run(query,studentId=studentId,eventId=eventId)
+    rating={}
+    #Get the DIRECT and INDIRECT ratings
+    for record in result:
+        rating[record["r"].type]=float(record["r"]["rating"])
+    #FIXME For now, just have INDIRECT rating equal to DIRECT rating
+    #FIXME Person is interested in the club that hosted this event
+    return (rating["INDIRECT"]+rating["DIRECT"])/2  #Return the average rating
+
+def studentClubSim(session,studentId,clubId,store):
+    #Check if club and student IDs are valid IDs
+    query=f"""
+    MATCH (s:Student {{StudentId:$studentId}}),(c:Club {{ClubId:$clubId}})
+    RETURN s,c
+    """
+    result=session.run(query,studentId=studentId,clubId=clubId)
+    records=[]
+    for record in result:
+        records.append(record)
+    if(records==[]):
+        return None
+    #Check if student is a member of the club
+    query=f"""
+    MATCH (s:Student {{StudentId:$studentId}})-[r:MEMBER_OF]-(c:Club {{ClubId:$clubId}})
+    RETURN r
+    """
+    #FIXME Add campus field to student and event venue field to event. If Club from same campus more likely student affinity
+    result=session.run(query,studentId=studentId,clubId=clubId).single()
+    if(not(result is None)):
+        return 1
+    return 0
+
 def analyzeNeighbourhood(session,studentName):
     studentName=studentName.strip()
     result=session.run("MATCH (n:Student) "

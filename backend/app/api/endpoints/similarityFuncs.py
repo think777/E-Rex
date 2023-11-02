@@ -2,7 +2,7 @@
 This module has all similarity functions
 '''
 from . import *
-from app.neo4j.helper import compareStudents, compareEvents
+from app.neo4j.helper import compareStudents, compareEvents, studentEventSim, studentClubSim
 
 session=db.getSession()
 
@@ -22,4 +22,20 @@ async def eventEvent(id1:str=Query(description="ID of event A"),id2:str=Query(de
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid event IDs")
+    return result
+
+@router.get('/studentEvent')
+async def studentEvent(sid:str=Query(description="ID of student"),eid:str=Query(descirption="ID of event")):
+    result=studentEventSim(session,sid,eid,False)
+    if(result is None):
+        # Handle the exception and return a 404 response
+        raise HTTPException(status_code=404, detail="Invalid IDs")
+    return result
+
+@router.get('/studentClub')
+async def studentClub(sid:str=Query(description="ID of student"),cid:str=Query(descirption="ID of club")):
+    result=studentClubSim(session,sid,cid,False)
+    if(result is None):
+        # Handle the exception and return a 404 response
+        raise HTTPException(status_code=404, detail="Invalid IDs")
     return result
