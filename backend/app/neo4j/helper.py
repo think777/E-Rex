@@ -71,7 +71,22 @@ def compareEvents(session,event1Id,event2Id,store):
     if(len(events)!=2):
         return None
     #Compare events
+    #Compare node features
     score=1 if events[0]['ClubId']==events[1]['ClubId'] else 0  #Check if they are hosted by same club
+    score+=1 if temp<1 else 1/temp  #TODO Factor in number of people who have given rating
+    temp=abs(int(events[0]['PrizePool'])-int(events[1]['PrizePool'])) #Find out diff. in prize pool
+    score+=1 if temp==0 else 1/temp
+    #TODO Compare EventDate with context
+    #Find similarity in EventType
+    temp=0
+    for type1 in events[0]['EventType']:
+        for type2 in events[1]['EventType']:
+            if type1==type2:
+                temp+=1
+    temp1=set(events[0]['EventType'])
+    temp2=set(events[1]['EventType'])
+    score+=len(temp1 & temp2)/len(temp1 | temp2)    #Ratio of common event types to all event types
+    #Compare network features
     #Find degrees of both events(popularity)
     rel=[{'r':[],'s':{}},{'r':[],'s':{}}]
     #OPTIMIZE Reduce number of queries
@@ -136,19 +151,6 @@ def compareEvents(session,event1Id,event2Id,store):
     score+=1 if temp1==temp2 else 1/abs(temp1-temp2)    #Find diff. in popularity
     #FIXME EventRating NULL for some Events
     temp=abs(float(events[0]['EventRating'])-float(events[1]['EventRating'])) #Find out diff. in avg. rating
-    score+=1 if temp<1 else 1/temp  #TODO Factor in number of people who have given rating
-    temp=abs(int(events[0]['PrizePool'])-int(events[1]['PrizePool'])) #Find out diff. in prize pool
-    score+=1 if temp==0 else 1/temp
-    #TODO Compare EventDate with context
-    #Find similarity in EventType
-    temp=0
-    for type1 in events[0]['EventType']:
-        for type2 in events[1]['EventType']:
-            if type1==type2:
-                temp+=1
-    temp1=set(events[0]['EventType'])
-    temp2=set(events[1]['EventType'])
-    score+=len(temp1 & temp2)/len(temp1 | temp2)    #Ratio of common event types to all event types
     score/=5  #Normalize wrt number of event properties compared
     #Store the calculated similarity score in the relationship
     if store:
@@ -171,14 +173,16 @@ def compareStudents(session,studentId1,studentId2,store):
     students=result.single()
     if(students is None):
         return None
+    #Compare node features
     score+=1 if students["s1"]["Branch"]==students["s2"]["Branch"] else 0   #Check whether students belong to same branch
     score+=1 if students["s1"]["Semester"]==students["s2"]["Semester"] else 0   #Check whether students belong to the same semester
+    score+=1 if round(temp1,1)==round(temp2,1) else 1/abs(temp1-temp2)  #Find similarity in students' CGPAs
+    #Compare network features
     temp1=set(students["s1"]["ClubName"])
     temp2=set(students["s2"]["ClubName"])
     score+=len(temp1 & temp2)/len(temp1 | temp2)    #Find the ratio of common clubs to all clubs they are members of
     temp1=float(students["s1"]["CGPA"])
     temp2=float(students["s2"]["CGPA"])
-    score+=1 if round(temp1,1)==round(temp2,1) else 1/abs(temp1-temp2)  #Find similarity in students' CGPAs
     #Find common events attended by student1 and student2
     query=f"""
         MATCH (s1:Student {{StudentId:$studentId1}})-[r1:DIRECT]-(:Event)-[r2:DIRECT]-(s2:Student {{StudentId:$studentId2}})
@@ -197,16 +201,37 @@ def compareStudents(session,studentId1,studentId2,store):
     score+=temp/len(set(students["s1"]["EventId"]) | set(students["s2"]["EventId"]))
     score/=5    #Normalize score wrt number of properties considered
     if(store):
-        query=f"""
-            MATCH (s1:Student {{StudentId:$studentId1}}), (s2:Student {{StudentId:$studentId2}})
-            MERGE (s1)-[:STUDENT_SIMILARITY{{score:$score}}]-(s2)
+        query="""
+            MATCH (s1:Student {StudentId:$studentId1}), (s2:Student {StudentId:$studentId2})
+            MERGE (s1)-[:STUDENT_SIMILARITY{score:$score}]-(s2)
         """
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
 def studentEventSim(session,studentId,eventId,store):
-    query=f"""
-    MATCH (s:Student {{StudentId:$studentId}})-[r:DIRECT|INDIRECT]-(e:Event {{EventId:$eventId}})
+    query="""
+    MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
+    RETURN s,e
+    """
+    result=session.run(query,studentId=studentId,eventId=eventId)
+    temp=result.single()
+    studNode=temp["s"]
+    eventNode=temp["e"]
+    query="""
+    MATCH (c:Club {ClubId:$clubId})
+    RETURN c.Club
+    """
+    result=session.run(query,clubId=eventNode["ClubId"])
+    club=result.single()["c.Club"].strip()
+    #club=f"[\"{club}\"]"
+    #Check if student is a member of the club that hosted(/is hosting) the event
+    temp=0
+    for x in studNode["ClubName"]:
+        if x[2:-2].strip()==club:
+            temp=1
+            break
+    query="""
+    MATCH (s:Student {StudentId:$studentId})-[r:DIRECT|INDIRECT]-(e:Event {EventId:$eventId})
     RETURN r
     """
     result=session.run(query,studentId=studentId,eventId=eventId)
@@ -216,7 +241,7 @@ def studentEventSim(session,studentId,eventId,store):
         rating[record["r"].type]=float(record["r"]["rating"])
     #FIXME For now, just have INDIRECT rating equal to DIRECT rating
     #FIXME Person is interested in the club that hosted this event
-    return (rating["INDIRECT"]+rating["DIRECT"])/2  #Return the average rating
+    return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10)/3  #Return the average rating
 
 def studentClubSim(session,studentId,clubId,store):
     #Check if club and student IDs are valid IDs
