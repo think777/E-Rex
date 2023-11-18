@@ -1,6 +1,7 @@
 from neo4j import GraphDatabase,exceptions
 import json
 import random
+import math
 
 def getSecret(jsonFile,keyList):
     try:
@@ -215,8 +216,9 @@ def studentEventSim(session,studentId,eventId,store):
     """
     result=session.run(query,studentId=studentId,eventId=eventId)
     temp=result.single()
-    studNode=temp["s"]
-    eventNode=temp["e"]
+    if temp is None:
+        return None
+    studNode,eventNode=temp["s"],temp["e"]
     query="""
     MATCH (c:Club {ClubId:$clubId})
     RETURN c.Club
@@ -262,9 +264,71 @@ def studentClubSim(session,studentId,clubId,store):
     """
     #FIXME Add campus field to student and event venue field to event. If Club from same campus more likely student affinity
     result=session.run(query,studentId=studentId,clubId=clubId).single()
-    if(not(result is None)):
-        return 1
-    return 0
+    score=0 if result is None else 1
+    #Find out the extent to which the student likes events hosted by the club
+    query="""
+    MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(event)-[r:DIRECT|INDIRECT]-(s:Student {StudentId:$studentId})
+    RETURN AVG(toFloat(r.rating)) as avg,COUNT(r) as count
+    """
+    result=session.run(query,clubId=clubId,studentId=studentId).single()
+    score+=0 if result["avg"] is None else result["avg"]/10
+    #Find the number of events hosted by the club that the student has attended
+    '''
+    Use the Logistic function to restrict the count to be a value between 0 and 1
+    (A/(1+e^(-x)))-1
+    '''
+    score+=0 if result["count"]==0 else 2/(1+math.exp(-result["count"]/2))-1
+    return score/3
+
+def eventClubSim(session,eventId,clubId,store):
+    query="""
+    MATCH (e:Event {EventId:$eventId}),(c:Club {ClubId:$clubId})
+    RETURN e,c
+    """
+    result=session.run(query,eventId=eventId,clubId=clubId)
+    temp=result.single()
+    if temp is None:
+        return None
+    event,club=temp["e"],temp["c"]
+    #CHECK Do we need to add the factor that event is hosted by club or not?
+    #Sanitize event types
+    temp=event["EventType"][1:-1].split(',')
+    temp=[x.strip()[1:-1] for x in temp]
+    score=1 if club["ClubDomain"] in temp else 0
+    #Get the avg. event rating for all events hosted by the club
+    query="""
+    MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(e:Event)
+    MATCH (e)-[r:DIRECT|INDIRECT]-()
+    RETURN AVG(toFloat(r.rating)) as avg
+    """
+    result=session.run(query,clubId=clubId)
+    temp=result.single()["avg"]
+    #Compare the avg. rating to event's avg. rating
+    query="""
+    MATCH (e:Event {EventId:$eventId})-[r:DIRECT|INDIRECT]-()
+    RETURN AVG(toFloat(r.rating)) as avg
+    """
+    result=session.run(query,eventId=eventId)
+    temp=abs(temp-result.single()["avg"])
+    #Get the avg. number of participants for all events hosted by the club
+    query="""
+    MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(e:Event)
+    MATCH (e)-[r:DIRECT]-()
+    WITH COUNT(DISTINCT e) as n,COUNT(r) as x
+    RETURN toFloat(x)/toFloat(n) as avg
+    """
+    result=session.run(query,clubId=clubId)
+    temp=result.single()["avg"]
+    #Get the number of participants for the event
+    query="""
+    MATCH (e:Event {EventId:$eventId})-[r:DIRECT]-()
+    RETURN count(r) as count
+    """
+    result=session.run(query,clubId=clubId,eventId=eventId)
+    #Compare the number of participants to the avvg. number of participants obtained previously
+    temp=abs(temp-result.single()["count"])
+    score+=1 if temp==0 else 1/temp
+    return score/3  #Noramlize score
 
 def analyzeNeighbourhood(session,studentName):
     studentName=studentName.strip()
@@ -310,8 +374,10 @@ def main():
     try:
         # Define your Neo4j connection parameters
         uri = "bolt://localhost:7687"
-        username = getSecret('secrets.json',['neo4jdb','username'])
-        password = getSecret('secrets.json',['neo4jdb','password'])
+        #username = getSecret('secrets.json',['neo4jdb','username'])
+        #password = getSecret('secrets.json',['neo4jdb','password'])
+        username = getSecret(['neo4jdb','username'])
+        password = getSecret(['neo4jdb','password'])
 
         # Create a session
         with GraphDatabase.driver(uri, auth=(username, password)) as driver:

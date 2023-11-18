@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.neo4j import DB as db
-from app.api.endpoints import similarityFuncs,spider
+from app.api.endpoints import similarityFuncs,spider,events
 
 app=FastAPI(title='E-Rex')
 
 app.include_router(similarityFuncs.router)
 app.include_router(spider.router)
+app.include_router(events.router)
 
 # Set up CORS
 origins = ["http://localhost:3000"]

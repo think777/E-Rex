@@ -8,12 +8,6 @@ import Logo from './components/Logo';
 import Row from './components/Row';
 
 const Home: React.FC = () => {
-  // Example data for the info rows
-  const infoData = [
-    { title: 'Row 1', description: 'Some information for row 1' },
-    { title: 'Row 2', description: 'Some information for row 2' },
-    // Add more rows as needed
-  ];
 
   type EventType = {
     EventDate: string;
@@ -59,13 +53,6 @@ const Home: React.FC = () => {
     }
     else
     {
-      setEventStatus((prev) => ({
-        ...prev,
-        [event.EventId]: {
-          ...prev[event.EventId],
-          ['registered']: !prev[event.EventId]?.registered,
-        },
-      }));
       // Display a custom styled alert
       Swal.fire({
         icon: 'success',
@@ -73,6 +60,13 @@ const Home: React.FC = () => {
         text: `You have successfully registered for the event "${event.Event}"!`,
         html: `You have successfully registered for the event "<strong>${event.Event}</strong>"!`,
       });
+      setEventStatus((prev) => ({
+        ...prev,
+        [event.EventId]: {
+          ...prev[event.EventId],
+          ['registered']: !prev[event.EventId]?.registered,
+        },
+      }));
     }
   };
 
@@ -175,7 +169,7 @@ const Home: React.FC = () => {
     setLoading(true); // Set loading state to true
     // Simulating a simple API request using the Fetch API
     try {
-      const response = await fetch(`http://127.0.0.1:8000/spider?id=${query}`);
+      const response = await fetch(`http://127.0.0.1:8000/spider/crawl?id=${query}`);
       const data = await response.json();
       setResult(data);
     } catch (error) {
@@ -284,7 +278,7 @@ const Home: React.FC = () => {
                   </svg>
               </span>
               <div className="group justify-center items-center relative cursor-pointer overflow-hidden transition-transform duration-500 transform hover:scale-105 hover:translate-y-[-8px] hover:translate-x-8">
-                <div className="p-4 hover:border transform hover:bg-gray-800 hover:shadow-lg hover:border-white-800 hover:rounded-lg">
+                <div className="p-4 hover:border transform hover:bg-gray-800 hover:border-white-800 hover:rounded-lg">
                 <div className="flex items-center space-x-4">
               <div className="flex-grow">
                 {/* ... (Existing code) */}

@@ -2,11 +2,13 @@
 This module has all similarity functions
 '''
 from . import *
-from app.neo4j.helper import compareStudents, compareEvents, studentEventSim, studentClubSim
+from app.neo4j.helper import compareStudents, compareEvents, studentEventSim, studentClubSim, eventClubSim
 
 session=db.getSession()
 
 router=APIRouter(prefix='/simFunc',tags=["similarityFuncs"])
+
+#For each similarity function, include immediate and multi-hop neighbours
 
 @router.get('/studentStudent')
 async def studentStudent(id1:str=Query(description="ID of student A"),id2:str=Query(description="ID of student B")):
@@ -35,6 +37,14 @@ async def studentEvent(sid:str=Query(description="ID of student"),eid:str=Query(
 @router.get('/studentClub')
 async def studentClub(sid:str=Query(description="ID of student"),cid:str=Query(descirption="ID of club")):
     result=studentClubSim(session,sid,cid,False)
+    if(result is None):
+        # Handle the exception and return a 404 response
+        raise HTTPException(status_code=404, detail="Invalid IDs")
+    return result
+
+@router.get('/eventClub')
+async def eventClub(eid:str=Query(description="ID of event"),cid:str=Query(descirption="ID of club")):
+    result=eventClubSim(session,eid,cid,False)
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid IDs")

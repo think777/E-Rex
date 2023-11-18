@@ -2,6 +2,6 @@
 import json
 
 #Global variables used in utils/
-SECRETS_PATH="app/secrets.json"
+SECRETS_PATH="backend/app/secrets.json"
 
 __all__=['json','SECRETS_PATH']

@@ -6,8 +6,10 @@ class Database:
     #Create an instance of Neo4j driver
         try:
             uri="bolt://localhost:7687"
-            username = getSecret(['neo4jdb','username'])
-            password = getSecret(['neo4jdb','password'])
+            #username = getSecret(['neo4jdb','username'])
+            #password = getSecret(['neo4jdb','password'])
+            username = getSecret(['testdb','username'])
+            password = getSecret(['testdb','password'])
             self._driver=GraphDatabase.driver(uri,auth=(username,password))
             self._driver.verify_connectivity()
             print("Neo4j Driver working!")  #LOG

@@ -2,10 +2,11 @@
 
 from neo4j import GraphDatabase
 from .helper import studentClubSim, studentEventSim
+from app.utils.secretHandler import getSecret
 
 uri = "bolt://localhost:7687"
-username = 'neo4j'
-password = 'testtest'
+username = getSecret(['testdb','username'])
+password = getSecret(['testdb','password'])
 
 driver=GraphDatabase.driver(uri,auth=(username,password))
 session=driver.session()
@@ -122,7 +123,6 @@ class Spider():
             session.run(query,studentId=currNode["StudentId"],eventId=event["EventId"],score=score)
             '''
             Next steps:
-            1) Create an API endpoint for spider
             1) Make weave recursive wrt student nodes. Complete all other SILK_ROAD gens.(like event, club) in current weave only.
             '''
     
@@ -157,7 +157,3 @@ class Spider():
 
     def assessChanges(self):
         pass
-
-"""spider=Spider()
-spider.weave(session,"1")
-spider.crawl("1")"""
