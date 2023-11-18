@@ -177,13 +177,13 @@ def compareStudents(session,studentId1,studentId2,store):
     #Compare node features
     score+=1 if students["s1"]["Branch"]==students["s2"]["Branch"] else 0   #Check whether students belong to same branch
     score+=1 if students["s1"]["Semester"]==students["s2"]["Semester"] else 0   #Check whether students belong to the same semester
+    temp1=float(students["s1"]["CGPA"])
+    temp2=float(students["s2"]["CGPA"])
     score+=1 if round(temp1,1)==round(temp2,1) else 1/abs(temp1-temp2)  #Find similarity in students' CGPAs
     #Compare network features
     temp1=set(students["s1"]["ClubName"])
     temp2=set(students["s2"]["ClubName"])
     score+=len(temp1 & temp2)/len(temp1 | temp2)    #Find the ratio of common clubs to all clubs they are members of
-    temp1=float(students["s1"]["CGPA"])
-    temp2=float(students["s2"]["CGPA"])
     #Find common events attended by student1 and student2
     query=f"""
         MATCH (s1:Student {{StudentId:$studentId1}})-[r1:DIRECT]-(:Event)-[r2:DIRECT]-(s2:Student {{StudentId:$studentId2}})
@@ -209,7 +209,7 @@ def compareStudents(session,studentId1,studentId2,store):
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
-def studentEventSim(session,studentId,eventId,store):
+def studentEventSim(session,studentId,eventId,**kwargs):
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
     RETURN s,e
@@ -245,7 +245,7 @@ def studentEventSim(session,studentId,eventId,store):
     #FIXME Person is interested in the club that hosted this event
     return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10)/3  #Return the average rating
 
-def studentClubSim(session,studentId,clubId,store):
+def studentClubSim(session,studentId,clubId,**kwargs):
     #Check if club and student IDs are valid IDs
     query=f"""
     MATCH (s:Student {{StudentId:$studentId}}),(c:Club {{ClubId:$clubId}})
@@ -280,7 +280,7 @@ def studentClubSim(session,studentId,clubId,store):
     score+=0 if result["count"]==0 else 2/(1+math.exp(-result["count"]/2))-1
     return score/3
 
-def eventClubSim(session,eventId,clubId,store):
+def eventClubSim(session,eventId,clubId,**kwargs):
     query="""
     MATCH (e:Event {EventId:$eventId}),(c:Club {ClubId:$clubId})
     RETURN e,c
