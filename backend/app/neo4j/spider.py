@@ -5,10 +5,8 @@ from .helper import studentClubSim, studentEventSim
 from app.utils.secretHandler import getSecret
 
 uri = "bolt://localhost:7687"
-# username = getSecret(['testdb','username'])
-# password = getSecret(['testdb','password'])
-username = "neo4j"
-password = "erex,12345"
+username = getSecret(['testdb','username'])
+password = getSecret(['testdb','password'])
 
 driver=GraphDatabase.driver(uri,auth=(username,password))
 session=driver.session()
@@ -83,6 +81,8 @@ class Spider():
         query="MATCH (s:Student {StudentId: $studentId})-[r]-(neighbour) WHERE type(r) <> 'SILK_ROAD' SET r.visited=1 RETURN DISTINCT(neighbour) as neighbour"
         result=session.run(query,studentId=studentId)
         temp=[]        
+        #whether neighbours exist or not, take the entire graph, predict edge weights
+
         for record in result:
             temp.append(record)
             label,=record["neighbour"].labels

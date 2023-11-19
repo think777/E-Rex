@@ -225,7 +225,6 @@ def calculate_weighted_similarity(student_interests, club_description):
     return similarity
 
 def studentEventSim(session,studentId,eventId,store):
-    print(eventId)
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
     RETURN s,e

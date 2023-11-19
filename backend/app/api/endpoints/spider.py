@@ -7,7 +7,6 @@ spider=Spider()
 
 @router.get('/weave')
 async def spiderWeave(id:str=Query(description="ID of student")):
-    print(id)
     result=spider.weave(id)
     if(result is None):
         raise HTTPException(status_code=404, detail="Invalid student ID")

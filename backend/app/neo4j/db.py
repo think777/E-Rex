@@ -9,8 +9,6 @@ class Database:
             password = getSecret(['neo4jdb','password'])
             username = getSecret(['testdb','username'])
             password = getSecret(['testdb','password'])
-            # username = "neo4j"
-            # password="erex,12345"
             self._driver=GraphDatabase.driver(uri,auth=(username,password))
             self._driver.verify_connectivity()
             print("Neo4j Driver working!") 
