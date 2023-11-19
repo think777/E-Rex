@@ -1,6 +1,3 @@
-'''
-This module has all similarity functions
-'''
 from . import *
 from app.neo4j.helper import compareStudents, compareEvents, studentEventSim, studentClubSim, eventClubSim
 

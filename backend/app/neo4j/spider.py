@@ -5,8 +5,10 @@ from .helper import studentClubSim, studentEventSim
 from app.utils.secretHandler import getSecret
 
 uri = "bolt://localhost:7687"
-username = getSecret(['testdb','username'])
-password = getSecret(['testdb','password'])
+# username = getSecret(['testdb','username'])
+# password = getSecret(['testdb','password'])
+username = "neo4j"
+password = "erex,12345"
 
 driver=GraphDatabase.driver(uri,auth=(username,password))
 session=driver.session()
@@ -58,7 +60,6 @@ metapaths={
 class Spider():
     def __init__(self):
         self.queue=[]
-        #Weights given to different relationships
         self.rel_weights={
             "SS":1,
             "SE":1,
@@ -68,37 +69,27 @@ class Spider():
     def construct(self):
         pass
     
-    def weave(self,session,studentId:str):
+    def weave(self,studentId:str):
         nodeQueue={"Student":[],"Club":[],"Event":[]}
-        #Get the node in question
-        query="""
-        MATCH (s:Student {StudentId: $studentId})
-        RETURN s
-        """
+        query="MATCH (s:Student {StudentId: $studentId}) RETURN s"
         result=session.run(query,studentId=studentId)
         currNode=result.single()["s"]
         '''
         In order to avoid revisiting paths, we need to be aware of visited relationships.
         Hence, mark edges visited.
         '''
-        query="""
-        MATCH ()-[r]-()
-        WHERE type(r) <> 'SILK_ROAD'
-        SET r.visited=0
-        """
+        query="MATCH ()-[r]-() WHERE type(r) <> 'SILK_ROAD' SET r.visited=0 "
         session.run(query)
-        query="""
-        MATCH (s:Student {StudentId: $studentId})-[r]-(neighbour)
-        WHERE type(r) <> 'SILK_ROAD'
-        SET r.visited=1
-        RETURN DISTINCT(neighbour) as neighbour
-        """
+        query="MATCH (s:Student {StudentId: $studentId})-[r]-(neighbour) WHERE type(r) <> 'SILK_ROAD' SET r.visited=1 RETURN DISTINCT(neighbour) as neighbour"
         result=session.run(query,studentId=studentId)
-        temp=[]
+        temp=[]        
         for record in result:
             temp.append(record)
             label,=record["neighbour"].labels
-            nodeQueue[label].append(record["neighbour"])
+            nodeQueue[label].append(record["neighbour"]) 
+        if(len(temp) == 0):
+            print("No neighbours!")
+            return 0
         for club in nodeQueue["Club"]:
             score=studentClubSim(session,currNode["StudentId"],club["ClubId"],True)
             #Weight the score
@@ -125,6 +116,7 @@ class Spider():
             Next steps:
             1) Make weave recursive wrt student nodes. Complete all other SILK_ROAD gens.(like event, club) in current weave only.
             '''
+        return "hello"
     
     def crawl(self,studentId:str):
         #TODO Need to account for supply of session either as an arg or as an attribute of the Spider()
@@ -133,6 +125,8 @@ class Spider():
         RETURN s
         """
         result=session.run(query,studentId=studentId)
+        print(result)
+        print("hello")
         temp=result.single()
         if temp is None:
             return None

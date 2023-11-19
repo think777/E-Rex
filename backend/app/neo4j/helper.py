@@ -2,6 +2,7 @@ from neo4j import GraphDatabase,exceptions
 import json
 import random
 import math
+import ast
 
 def getSecret(jsonFile,keyList):
     try:
@@ -177,18 +178,20 @@ def compareStudents(session,studentId1,studentId2,store):
     #Compare node features
     score+=1 if students["s1"]["Branch"]==students["s2"]["Branch"] else 0   #Check whether students belong to same branch
     score+=1 if students["s1"]["Semester"]==students["s2"]["Semester"] else 0   #Check whether students belong to the same semester
+    temp1=float(students["s1"]["CGPA"])
+    temp2=float(students["s2"]["CGPA"])
     score+=1 if round(temp1,1)==round(temp2,1) else 1/abs(temp1-temp2)  #Find similarity in students' CGPAs
     #Compare network features
     temp1=set(students["s1"]["ClubName"])
     temp2=set(students["s2"]["ClubName"])
     score+=len(temp1 & temp2)/len(temp1 | temp2)    #Find the ratio of common clubs to all clubs they are members of
-    temp1=float(students["s1"]["CGPA"])
-    temp2=float(students["s2"]["CGPA"])
     #Find common events attended by student1 and student2
     query=f"""
         MATCH (s1:Student {{StudentId:$studentId1}})-[r1:DIRECT]-(:Event)-[r2:DIRECT]-(s2:Student {{StudentId:$studentId2}})
         RETURN r1,r2
     """
+
+
     result=session.run(query,studentId1=studentId1,studentId2=studentId2)
     temp=0
     '''
@@ -209,7 +212,20 @@ def compareStudents(session,studentId1,studentId2,store):
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
+def calculate_weighted_similarity(student_interests, club_description):
+    student_scores = dict(student_interests)
+    club_scores = dict(club_description)
+    all_topics = set(student_scores.keys()).union(club_scores.keys())
+    weighted_sum = sum(student_scores.get(topic, 0) * club_scores.get(topic, 0) for topic in all_topics)
+    magnitude_student = sum(score ** 2 for score in student_scores.values()) ** 0.5
+    magnitude_club = sum(score ** 2 for score in club_scores.values()) ** 0.5
+    if magnitude_student == 0 or magnitude_club == 0:
+        return 0
+    similarity = weighted_sum / (magnitude_student * magnitude_club)
+    return similarity
+
 def studentEventSim(session,studentId,eventId,store):
+    print(eventId)
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
     RETURN s,e
@@ -218,6 +234,7 @@ def studentEventSim(session,studentId,eventId,store):
     temp=result.single()
     if temp is None:
         return None
+    
     studNode,eventNode=temp["s"],temp["e"]
     query="""
     MATCH (c:Club {ClubId:$clubId})
@@ -243,7 +260,36 @@ def studentEventSim(session,studentId,eventId,store):
         rating[record["r"].type]=float(record["r"]["rating"])
     #FIXME For now, just have INDIRECT rating equal to DIRECT rating
     #FIXME Person is interested in the club that hosted this event
-    return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10)/3  #Return the average rating
+    r1 = """MATCH path = (n:Event {EventId:$eventId})-[:ATTENDED]-(o:Student {StudentId:$studentId}) RETURN n.Topics as event_topics,  o.Topics  as student_topics"""
+    r2 = """MATCH path = (n:Event {EventId:$eventId})-[:HOSTED_BY]-(o:Club) RETURN n.Topics as event_topics,  o.Topics  as club_topics"""
+    r3 = """MATCH (n:Student {StudentId:$studentId}) RETURN n.Topics as student_topics"""
+
+    result1 = session.run(r1,eventId=eventId,studentId=studentId)
+    result2 = session.run(r2, eventId=eventId)
+    result3 = session.run(r3, studentId=studentId)
+    records3 = list(result3)
+    student_topic = ""
+    if records3:
+        for record in records3:
+            student_topic = ast.literal_eval(record["student_topics"])
+    records2 = list(result2)
+    if records2:
+        for record in records2:
+            club_topics = ast.literal_eval(record["club_topics"])
+            if student_topic != "":
+                sim = calculate_weighted_similarity(student_topic, club_topics)
+            else:
+                sim = 0
+        temp = temp + sim
+    records1 = list(result1) 
+    if records1:
+        for record in records1:
+            event_topics = ast.literal_eval(record["event_topics"])
+            student_topics = ast.literal_eval(record["student_topics"])
+            sim = calculate_weighted_similarity(student_topics, event_topics)
+    if(len(rating) > 0 ):
+        return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10 + sim)/3  #Return the average rating
+    else: return (temp + sim)/3
 
 def studentClubSim(session,studentId,clubId,store):
     #Check if club and student IDs are valid IDs
@@ -258,19 +304,23 @@ def studentClubSim(session,studentId,clubId,store):
     if(records==[]):
         return None
     #Check if student is a member of the club
-    query=f"""
-    MATCH (s:Student {{StudentId:$studentId}})-[r:MEMBER_OF]-(c:Club {{ClubId:$clubId}})
+    query="""
+    MATCH (s:Student {StudentId:$studentId})-[r:MEMBER_OF]-(c:Club {ClubId:$clubId})
     RETURN r
     """
     #FIXME Add campus field to student and event venue field to event. If Club from same campus more likely student affinity
     result=session.run(query,studentId=studentId,clubId=clubId).single()
+
     score=0 if result is None else 1
     #Find out the extent to which the student likes events hosted by the club
+
     query="""
     MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(event)-[r:DIRECT|INDIRECT]-(s:Student {StudentId:$studentId})
     RETURN AVG(toFloat(r.rating)) as avg,COUNT(r) as count
     """
+
     result=session.run(query,clubId=clubId,studentId=studentId).single()
+
     score+=0 if result["avg"] is None else result["avg"]/10
     #Find the number of events hosted by the club that the student has attended
     '''
@@ -278,7 +328,20 @@ def studentClubSim(session,studentId,clubId,store):
     (A/(1+e^(-x)))-1
     '''
     score+=0 if result["count"]==0 else 2/(1+math.exp(-result["count"]/2))-1
-    return score/3
+    r = """MATCH path = (n:Club {ClubId:$clubId})-[:MEMBER_OF]-(o:Student {StudentId:$studentId})
+RETURN n.Topics as club_topics,  o.Topics  as student_topics
+        """
+    result=session.run(r,clubId=clubId,studentId=studentId)
+    records = list(result) 
+    if records:
+        for record in records:
+            club_topics = ast.literal_eval(record["club_topics"])
+            student_topics = ast.literal_eval(record["student_topics"])
+            sim = calculate_weighted_similarity(student_topics, club_topics)
+            score += sim / 3
+    else:
+        pass
+    return score
 
 def eventClubSim(session,eventId,clubId,store):
     query="""
