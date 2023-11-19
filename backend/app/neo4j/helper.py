@@ -212,6 +212,7 @@ def compareStudents(session,studentId1,studentId2,store):
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
+<<<<<<< HEAD
 def calculate_weighted_similarity(student_interests, club_description):
     student_scores = dict(student_interests)
     club_scores = dict(club_description)
@@ -225,6 +226,9 @@ def calculate_weighted_similarity(student_interests, club_description):
     return similarity
 
 def studentEventSim(session,studentId,eventId,store):
+=======
+def studentEventSim(session,studentId,eventId,**kwargs):
+>>>>>>> 9562e4e4419e35220000a8419601488eda5f8a2d
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
     RETURN s,e
@@ -290,7 +294,7 @@ def studentEventSim(session,studentId,eventId,store):
         return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10 + sim)/3  #Return the average rating
     else: return (temp + sim)/3
 
-def studentClubSim(session,studentId,clubId,store):
+def studentClubSim(session,studentId,clubId,**kwargs):
     #Check if club and student IDs are valid IDs
     query=f"""
     MATCH (s:Student {{StudentId:$studentId}}),(c:Club {{ClubId:$clubId}})
@@ -342,7 +346,7 @@ RETURN n.Topics as club_topics,  o.Topics  as student_topics
         pass
     return score
 
-def eventClubSim(session,eventId,clubId,store):
+def eventClubSim(session,eventId,clubId,**kwargs):
     query="""
     MATCH (e:Event {EventId:$eventId}),(c:Club {ClubId:$clubId})
     RETURN e,c
