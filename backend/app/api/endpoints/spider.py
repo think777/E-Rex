@@ -7,7 +7,8 @@ spider=Spider()
 
 @router.get('/weave')
 async def spiderWeave(id:str=Query(description="ID of student")):
-    result=spider.weave(id)
+    spider.construct()  #FIXME Remove later
+    result=spider.weave('Student',id)
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid student ID")

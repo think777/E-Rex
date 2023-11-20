@@ -28,7 +28,7 @@ async def eventEvent(id1:str=Query(description="ID of event A"),id2:str=Query(de
 
 @router.get('/studentEvent')
 async def studentEvent(sid:str=Query(description="ID of student"),eid:str=Query(descirption="ID of event")):
-    result=studentEventSim(session,sid,eid,False)
+    result=studentEventSim(session,sid,eid)
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid IDs")
@@ -36,7 +36,7 @@ async def studentEvent(sid:str=Query(description="ID of student"),eid:str=Query(
 
 @router.get('/studentClub')
 async def studentClub(sid:str=Query(description="ID of student"),cid:str=Query(descirption="ID of club")):
-    result=studentClubSim(session,sid,cid,False)
+    result=studentClubSim(session,sid,cid)
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid IDs")
@@ -44,7 +44,7 @@ async def studentClub(sid:str=Query(description="ID of student"),cid:str=Query(d
 
 @router.get('/eventClub')
 async def eventClub(eid:str=Query(description="ID of event"),cid:str=Query(descirption="ID of club")):
-    result=eventClubSim(session,eid,cid,False)
+    result=eventClubSim(session,eid,cid)
     if(result is None):
         # Handle the exception and return a 404 response
         raise HTTPException(status_code=404, detail="Invalid IDs")

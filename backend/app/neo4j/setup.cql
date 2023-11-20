@@ -21,7 +21,7 @@ SET c.ClubName = membersList
 //Connect Clubs and Events
 MATCH (p:Event),(c:Club)
 WHERE p.ClubId = c.ClubId
-CREATE (p)-[:HOSTED_BY]->(c)
+MERGE (p)-[:HOSTED_BY]-(c)
 
 CREATE INDEX FOR (c:Student) ON (c.StudentId)
 

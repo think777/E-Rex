@@ -2,6 +2,7 @@ from neo4j import GraphDatabase,exceptions
 import json
 import random
 import math
+import ast
 
 def getSecret(jsonFile,keyList):
     try:
@@ -44,15 +45,14 @@ def create_relationships_with_events(session, student_node):
         )
         #CHECK
 
-def returnMetapaths(session,studentName,metapath):
+def returnMetapaths(session,studentId,metapath):
     query=f"""
-                MATCH (n:Student)
-                WHERE TRIM(n.Name)=$studentName
-                WITH n as source
-                MATCH path= {metapath}
-                RETURN path
-            """
-    result=session.run(query,studentName=studentName)
+        MATCH (s:Student {{StudentId:$studentId}})
+        WITH s as source
+        MATCH path= {metapath}
+        RETURN path
+        """
+    result=session.run(query,studentId=studentId)
     paths=[]
     for record in result:
         paths.append(record['path'])
@@ -209,6 +209,18 @@ def compareStudents(session,studentId1,studentId2,store):
         session.run(query,studentId1=studentId1,studentId2=studentId2,score=score)
     return score
 
+def calculate_weighted_similarity(student_interests, club_description):
+    student_scores = dict(student_interests)
+    club_scores = dict(club_description)
+    all_topics = set(student_scores.keys()).union(club_scores.keys())
+    weighted_sum = sum(student_scores.get(topic, 0) * club_scores.get(topic, 0) for topic in all_topics)
+    magnitude_student = sum(score ** 2 for score in student_scores.values()) ** 0.5
+    magnitude_club = sum(score ** 2 for score in club_scores.values()) ** 0.5
+    if magnitude_student == 0 or magnitude_club == 0:
+        return 0
+    similarity = weighted_sum / (magnitude_student * magnitude_club)
+    return similarity
+
 def studentEventSim(session,studentId,eventId,**kwargs):
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
@@ -218,20 +230,25 @@ def studentEventSim(session,studentId,eventId,**kwargs):
     temp=result.single()
     if temp is None:
         return None
+    
     studNode,eventNode=temp["s"],temp["e"]
     query="""
     MATCH (c:Club {ClubId:$clubId})
-    RETURN c.Club
+    RETURN c.Club as club
     """
-    result=session.run(query,clubId=eventNode["ClubId"])
-    club=result.single()["c.Club"].strip()
-    #club=f"[\"{club}\"]"
-    #Check if student is a member of the club that hosted(/is hosting) the event
-    temp=0
-    for x in studNode["ClubName"]:
-        if x[2:-2].strip()==club:
-            temp=1
-            break
+    result=session.run(query,clubId=eventNode["ClubId"]).single()
+    score=0
+    #FIXME Remove this condition later
+    if result:
+        club=result["club"].strip()
+        #club=f"[\"{club}\"]"
+        #Check if student is a member of the club that hosted(/is hosting) the event
+        temp=0
+        for x in studNode["ClubName"]:
+            if x[2:-2].strip()==club:
+                temp=1
+                break
+        score+=temp
     query="""
     MATCH (s:Student {StudentId:$studentId})-[r:DIRECT|INDIRECT]-(e:Event {EventId:$eventId})
     RETURN r
@@ -243,7 +260,33 @@ def studentEventSim(session,studentId,eventId,**kwargs):
         rating[record["r"].type]=float(record["r"]["rating"])
     #FIXME For now, just have INDIRECT rating equal to DIRECT rating
     #FIXME Person is interested in the club that hosted this event
-    return (temp+(rating["INDIRECT"]+rating["DIRECT"])/10)/3  #Return the average rating
+    r1 = """MATCH path = (n:Event {EventId:$eventId})-[:ATTENDED]-(o:Student {StudentId:$studentId}) RETURN n.Topics as event_topics,  o.Topics  as student_topics"""
+    r2 = """MATCH path = (n:Event {EventId:$eventId})-[:HOSTED_BY]-(o:Club) RETURN n.Topics as event_topics,  o.Topics  as club_topics"""
+    r3 = """MATCH (n:Student {StudentId:$studentId}) RETURN n.Topics as student_topics"""
+    result1 = session.run(r1,eventId=eventId,studentId=studentId)
+    result2 = session.run(r2, eventId=eventId)
+    result3 = session.run(r3, studentId=studentId)
+    records3 = list(result3)
+    student_topic = ""
+    if records3:
+        for record in records3:
+            student_topic = ast.literal_eval(record["student_topics"])
+    records2 = list(result2)
+    if records2:
+        for record in records2:
+            club_topics = ast.literal_eval(record["club_topics"])
+            if student_topic != "":
+                sim = calculate_weighted_similarity(student_topic, club_topics)
+            else:
+                sim = 0
+        score+= sim
+    records1 = list(result1) 
+    if records1:
+        for record in records1:
+            event_topics = ast.literal_eval(record["event_topics"])
+            student_topics = ast.literal_eval(record["student_topics"])
+            sim = calculate_weighted_similarity(student_topics, event_topics)
+    return (score+(rating["INDIRECT"]+rating["DIRECT"])/10)/4  #Return the average rating
 
 def studentClubSim(session,studentId,clubId,**kwargs):
     #Check if club and student IDs are valid IDs
@@ -258,8 +301,8 @@ def studentClubSim(session,studentId,clubId,**kwargs):
     if(records==[]):
         return None
     #Check if student is a member of the club
-    query=f"""
-    MATCH (s:Student {{StudentId:$studentId}})-[r:MEMBER_OF]-(c:Club {{ClubId:$clubId}})
+    query="""
+    MATCH (s:Student {StudentId:$studentId})-[r:MEMBER_OF]-(c:Club {ClubId:$clubId})
     RETURN r
     """
     #FIXME Add campus field to student and event venue field to event. If Club from same campus more likely student affinity
@@ -278,6 +321,20 @@ def studentClubSim(session,studentId,clubId,**kwargs):
     (A/(1+e^(-x)))-1
     '''
     score+=0 if result["count"]==0 else 2/(1+math.exp(-result["count"]/2))-1
+    r = """
+    MATCH path = (n:Club {ClubId:$clubId})-[:MEMBER_OF]-(o:Student {StudentId:$studentId})
+    RETURN n.Topics as club_topics,  o.Topics  as student_topics
+    """
+    result=session.run(r,clubId=clubId,studentId=studentId)
+    records = list(result) 
+    if records:
+        for record in records:
+            club_topics = ast.literal_eval(record["club_topics"])
+            student_topics = ast.literal_eval(record["student_topics"])
+            sim = calculate_weighted_similarity(student_topics, club_topics)
+            score += sim / 2
+    else:
+        pass    #OPTIMIZE
     return score/3
 
 def eventClubSim(session,eventId,clubId,**kwargs):
@@ -301,48 +358,56 @@ def eventClubSim(session,eventId,clubId,**kwargs):
     MATCH (e)-[r:DIRECT|INDIRECT]-()
     RETURN AVG(toFloat(r.rating)) as avg
     """
-    result=session.run(query,clubId=clubId)
-    temp=result.single()["avg"]
+    result=session.run(query,clubId=clubId).single()
+    temp1=0 if result["avg"] is None else result["avg"]
     #Compare the avg. rating to event's avg. rating
     query="""
     MATCH (e:Event {EventId:$eventId})-[r:DIRECT|INDIRECT]-()
     RETURN AVG(toFloat(r.rating)) as avg
     """
-    result=session.run(query,eventId=eventId)
-    temp=abs(temp-result.single()["avg"])
+    result=session.run(query,eventId=eventId).single()
+    temp2=0 if result["avg"] is None else result["avg"]
+    #OPTIMIZE Add a global rule for strong preference for higher event rating or do it locally like this?
+    #If event is rated higher, stronger relationship between club and event
+    score+=temp2/10
+    temp=abs(temp1-temp2)
+    #CHECK Best way to handle cases where temp1=0 or/and temp2=0
+    score+= 0.5 if temp1 == 0 or temp2 == 0 else (1 if temp1 == temp2 or temp<1 else 1 / temp)
     #Get the avg. number of participants for all events hosted by the club
     query="""
     MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(e:Event)
     MATCH (e)-[r:DIRECT]-()
     WITH COUNT(DISTINCT e) as n,COUNT(r) as x
-    RETURN toFloat(x)/toFloat(n) as avg
+    RETURN x,n
     """
-    result=session.run(query,clubId=clubId)
-    temp=result.single()["avg"]
+    result=session.run(query,clubId=clubId).single()
+    temp=0 if result["n"]==0 else float(result["x"])/result["n"]
     #Get the number of participants for the event
     query="""
     MATCH (e:Event {EventId:$eventId})-[r:DIRECT]-()
     RETURN count(r) as count
     """
     result=session.run(query,clubId=clubId,eventId=eventId)
-    #Compare the number of participants to the avvg. number of participants obtained previously
+    #Compare the number of participants to the avg. number of participants obtained previously
     temp=abs(temp-result.single()["count"])
     score+=1 if temp==0 else 1/temp
     return score/3  #Noramlize score
 
-def analyzeNeighbourhood(session,studentName):
-    studentName=studentName.strip()
-    result=session.run("MATCH (n:Student) "
-                     "WHERE TRIM(n.Name)=$studentName "
-                     "RETURN n",
-                     studentName=studentName)
-    root=result.single().value()
+def analyzeMetapathsNeighbourhood(session,studentId):
+    #studentName=studentName.strip()
+    query="""
+    MATCH (s:Student {StudentId:$studentId})
+    RETURN s
+    """
+    result=session.run(query,studentId=studentId)
+    root=result.single()["s"]
+    #TODO Include the 5 metapaths between any 2 students
     metapaths={'meta_SCE':'(source)-[:MEMBER_OF]-(:Club)-[:HOSTED_BY]-(:Event)',
                'meta_SCS':'(source)-[:MEMBER_OF]-(:Club)-[:MEMBER_OF]-(:Student)',
                'meta_SEC':'(source)-[:DIRECT]-(:Event)-[:HOSTED_BY]-(:Club)',
                'meta_SES':'(source)-[:DIRECT]-(:Event)-[:DIRECT]-(:Student)'}
     for key in metapaths.keys():
-        paths=returnMetapaths(session,studentName,metapaths[key])
+        paths=returnMetapaths(session,studentId,metapaths[key])
         query=f"""
             MATCH (n:Student)
             WHERE n.StudentId=$studentId
@@ -350,25 +415,6 @@ def analyzeNeighbourhood(session,studentName):
             RETURN n
             """
         session.run(query,studentId=root['StudentId'])
-    '''session.run("MATCH (n:Student) "
-                        "WHERE TRIM(n.Name)=$studentName "
-                        "WITH n as source "
-                        "MATCH (source)-[r*1..2]-(neighbour) "
-                        "RETURN source,r,neighbour",
-                        studentName=studentName)
-    # Iterate through the records and print nodes and relationships
-    for record in neighbourhoodSubGraph:
-        source_node = record["source"]
-        relationships = record["r"]
-        neighbor_node = record["neighbour"]
-        
-        print(f"Source Node: {source_node}")
-        
-        for relationship in relationships:
-            print(f"Relationship: {relationship}")
-        
-        print(f"Neighbor Node: {neighbor_node}")
-    return neighbourhoodSubGraph'''
 
 def main():
     try:

@@ -1,7 +1,7 @@
 #The main graph traversal algorithm
 
 from neo4j import GraphDatabase
-from .helper import studentClubSim, studentEventSim, eventClubSim
+from .helper import studentClubSim, studentEventSim, eventClubSim, analyzeMetapathsNeighbourhood
 from app.utils.secretHandler import getSecret
 
 uri = "bolt://localhost:7687"
@@ -67,81 +67,69 @@ class Spider():
             frozenset({'E','C'}):1
             }
     
-    def construct(self,session):
+    def construct(self):
         #When the graph is constructed initially, all the nodes need to be marked as unvisited
         query="""
         MATCH (s)
-        WHERE type(r) <> 'SILK_ROAD'
         SET s.visited=0
         """
         session.run(query)
     
-    def weave(self,studentId:str):
+    def weave(self,nType:str,nodeId:str):
         nodeQueue=[]
+
         def weaveNeighbourhood(node):
             nodeType,=node.labels
             neighbourQueue={"Student":[],"Club":[],"Event":[]}
             query=f"""
-            MATCH (s:{type} {{{type+'Id'}: $id}})-[r]-(neighbour)
+            MATCH (node:{nodeType} {{{nodeType+'Id'}: $nodeId}})-[r]-(neighbour)
             WHERE type(r) <> 'SILK_ROAD'
-            SET r.visited=1
-            RETURN DISTINCT(neighbour) as neighbour
+            RETURN DISTINCT neighbour as neighbour
             """
-            result=session.run(query,id=node[type+"Id"])
+            result=session.run(query,nodeId=node[nodeType+"Id"])
+
             for record in result:
-                nodeQueue.append(record)
+                if record["neighbour"]["visited"]==0:
+                    nodeQueue.append(record["neighbour"])
                 label,=record["neighbour"].labels
                 neighbourQueue[label].append(record["neighbour"])
-
-            for club in nodeQueue["Club"]:
-                nodeTypes=frozenset({nodeType[0],'C'})
-                clubSimFunc=self.helper(nodeTypes)
-                score=clubSimFunc(session,node["StudentId"],club["ClubId"],True)
-                #Weight the score
-                score*=self.rel_weights[nodeTypes]
-                #Store the sim. score
-                query="""
-                MATCH (s:Student {StudentId: $studentId}), (c:Club {ClubId: $clubId})
-                MERGE (s)-[r:SILK_ROAD]-(c)
-                SET r.weight=$score
-                """
-                session.run(query,studentId=node["StudentId"],clubId=club["ClubId"],score=score)
-            for event in nodeQueue["Event"]:
-                nodeTypes=frozenset({nodeType[0],'E'})
-                eventSimFunc=self.helper(nodeType,'Event')
-                score=eventSimFunc(session,node["StudentId"],event["EventId"],True)
-                #Weight the score
-                score*=self.rel_weights[nodeTypes]
-                #Store the sim. score
-                query="""
-                MATCH (s:Student {StudentId: $studentId}), (e:Event {EventId: $eventId})
-                MERGE (s)-[r:SILK_ROAD]-(e)
-                SET r.weight=$score
-                """
-                session.run(query,studentId=node["StudentId"],eventId=event["EventId"],score=score)
-            for student in nodeQueue["Student"]:
-                nodeTypes=frozenset({nodeType[0],'S'})
-                studentSimFunc=self.helper(nodeTypes)
-                score=studentSimFunc(session,node["StudentId"],event["EventId"],True)
-                #Weight the score
-                score*=self.rel_weights[nodeTypes]
-                #Store the sim. score
-                query="""
-                MATCH (s:Student {StudentId: $studentId}), (e:Event {EventId: $eventId})
-                MERGE (s)-[r:SILK_ROAD]-(e)
-                SET r.weight=$score
-                """
-                session.run(query,studentId=node["StudentId"],eventId=event["EventId"],score=score)
             
+            for labelType in neighbourQueue.keys():
+                for neighbour in neighbourQueue[labelType]:
+                    nodeTypes=frozenset({nodeType[0],labelType[0]})
+                    simFuncHandler=self.helper('simFuncHandler')
+                    simFunc=simFuncHandler(nodeTypes)
+                    arg1 = neighbour["StudentId"] if 'Student' in neighbour.labels else node["StudentId"] if 'Student' in node.labels else None
+                    arg2 = neighbour["EventId"] if 'Event' in neighbour.labels else node["EventId"] if 'Event' in node.labels else None
+                    arg3 = neighbour["ClubId"] if 'Club' in neighbour.labels else node["ClubId"] if 'Club' in node.labels else None
+                    score=simFunc(session,studentId=arg1,eventId=arg2,clubId=arg3)
+                    #Weigh the score
+                    score*=self.rel_weights[nodeTypes]
+                    #Store the sim. score as SILK_ROAD attribute
+                    query=f"""
+                    MATCH (node1:{nodeType} {{{nodeType+'Id'}: $id1}}), (node2:{labelType} {{{labelType+'Id'}: $id2}})
+                    MERGE (node1)-[r:SILK_ROAD]-(node2)
+                    SET r.weight=$score
+                    """
+                    session.run(query,id1=node[nodeType+'Id'],id2=neighbour[labelType+'Id'],score=score)
+            
+            #Mark the node as visited
+            query=f"""
+            MATCH (node:{nodeType} {{{nodeType+'Id'}: $nodeId}})
+            SET node.visited=1
+            """
+            session.run(query,nodeId=node[nodeType+"Id"])
+
         #Get the node in question
-        query="""
-        MATCH (s:Student {StudentId: $studentId})
-        RETURN s
+        query=f"""
+        MATCH (node:{nType} {{{nType+'Id'}: $nodeId}})
+        RETURN node
         """
-        result=session.run(query,studentId=studentId).single()
+        result=session.run(query,nodeId=nodeId).single()
         if result is None:
             return None
-        nodeQueue.append(result["s"])
+        nodeQueue.append(result["node"])
+
         while True:
             try:
                 #Get the checkVisited function
@@ -149,9 +137,15 @@ class Spider():
                 #Check if node has already been visited
                 if checkVisited(nodeQueue[0]):
                     nodeQueue.pop(0)
-                weaveNeighbourhood(nodeQueue.pop(0))
+                else:
+                    temp,=nodeQueue[0].labels
+                    if temp=='Student':
+                        analyzeMetapathsNeighbourhood(session,nodeQueue[0]["StudentId"])
+                    weaveNeighbourhood(nodeQueue.pop(0))
             except IndexError:
                 break
+
+        return True
     
     def crawl(self,studentId:str):
         #TODO Need to account for supply of session either as an arg or as an attribute of the Spider()
@@ -164,6 +158,7 @@ class Spider():
         if temp is None:
             return None
         studNode=temp['s']
+        
         '''
         In order to avoid revisiting paths, we need to be aware of visited relationships.
         Hence, mark edges visited.
@@ -199,10 +194,10 @@ class Spider():
         def checkVisited(node):
             label,=node.labels
             query=f"""
-            MATCH (x:{label} {{{label+'Id'}:$id}})
+            MATCH (x:{label} {{{label+'Id'}:$nodeId}})
             RETURN x.visited as visited
             """
-            result=session.run(query,id=node[label+"Id"]).single()
+            result=session.run(query,nodeId=node[label+"Id"]).single()
             return result["visited"]==1
         def simFuncHandler(types:frozenset):
             simFuncDict={
