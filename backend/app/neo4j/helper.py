@@ -3,6 +3,7 @@ import json
 import random
 import math
 import ast
+import ast
 
 def getSecret(jsonFile,keyList):
     try:
@@ -189,6 +190,8 @@ def compareStudents(session,studentId1,studentId2,store):
         MATCH (s1:Student {{StudentId:$studentId1}})-[r1:DIRECT]-(:Event)-[r2:DIRECT]-(s2:Student {{StudentId:$studentId2}})
         RETURN r1,r2
     """
+
+
     result=session.run(query,studentId1=studentId1,studentId2=studentId2)
     temp=0
     '''
@@ -222,6 +225,7 @@ def calculate_weighted_similarity(student_interests, club_description):
     return similarity
 
 def studentEventSim(session,studentId,eventId,**kwargs):
+>>>>>>> 9562e4e4419e35220000a8419601488eda5f8a2d
     query="""
     MATCH (s:Student {StudentId:$studentId}),(e:Event {EventId:$eventId})
     RETURN s,e
@@ -230,6 +234,7 @@ def studentEventSim(session,studentId,eventId,**kwargs):
     temp=result.single()
     if temp is None:
         return None
+    
     
     studNode,eventNode=temp["s"],temp["e"]
     query="""
@@ -303,17 +308,23 @@ def studentClubSim(session,studentId,clubId,**kwargs):
     #Check if student is a member of the club
     query="""
     MATCH (s:Student {StudentId:$studentId})-[r:MEMBER_OF]-(c:Club {ClubId:$clubId})
+    query="""
+    MATCH (s:Student {StudentId:$studentId})-[r:MEMBER_OF]-(c:Club {ClubId:$clubId})
     RETURN r
     """
     #FIXME Add campus field to student and event venue field to event. If Club from same campus more likely student affinity
     result=session.run(query,studentId=studentId,clubId=clubId).single()
+
     score=0 if result is None else 1
     #Find out the extent to which the student likes events hosted by the club
+
     query="""
     MATCH (c:Club {ClubId:$clubId})-[HOSTED_BY]-(event)-[r:DIRECT|INDIRECT]-(s:Student {StudentId:$studentId})
     RETURN AVG(toFloat(r.rating)) as avg,COUNT(r) as count
     """
+
     result=session.run(query,clubId=clubId,studentId=studentId).single()
+
     score+=0 if result["avg"] is None else result["avg"]/10
     #Find the number of events hosted by the club that the student has attended
     '''

@@ -58,7 +58,6 @@ metapaths={
 class Spider():
     def __init__(self):
         self.queue=[]
-        #Weights given to different relationships
         self.rel_weights={
             frozenset({'S','S'}):1,
             frozenset({'E','E'}):1,
@@ -154,6 +153,8 @@ class Spider():
         RETURN s
         """
         result=session.run(query,studentId=studentId)
+        print(result)
+        print("hello")
         temp=result.single()
         if temp is None:
             return None
