@@ -19,15 +19,14 @@ const Home: React.FC = () => {
     EventRating: string;
     ClubId: string;
     EventDescription: string;
+    score: number;
   };
 
   const [query, setQuery] = useState<string>('');
   const [result, setResult] = useState<EventType[]|null>(null);
   const [isPopoverVisible, setPopoverVisible] = useState(false);
   const [isLoading, setLoading] = useState<boolean>(false);
-  const [currentStep, setCurrentStep] = useState<number>(0);
   const [eventStatus, setEventStatus] = useState<{ [key: string]: { liked: boolean; remind: boolean; bookmarked: boolean; registered: boolean } }>(() => {
-    console.log(result);
     if (!result) {
       // Handle the case when result is null
       return {};
@@ -42,142 +41,325 @@ const Home: React.FC = () => {
   const handleRegistration = (event: EventType) => {
     // Perform registration logic here for the specific event (use 'eventId')
     // For demonstration purposes, we'll just toggle the registration status
-    if(eventStatus[event.EventId]?.registered)
-    {
-      Swal.fire({
-        icon: 'info',
-        title: 'Registered!',
-        text: `You have already registered for the event "${event.Event}".`,
-        html: `You have already registered for the event "<strong>${event.Event}</strong>".`,
+  setLoading(true);
+  // Notify the API
+  const apiUrl = 'http://127.0.0.1:8000/event/interaction/set'; // Replace with your actual API endpoint
+  const requestBody = {
+    studentId: query,
+    eventId: event.EventId,
+    interaction: 'registered',
+    status: !eventStatus[event.EventId]?.registered,
+  };
+
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // You may need to include additional headers (e.g., authentication token)
+    },
+    body: JSON.stringify(requestBody),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to notify API');
+      }
+      return response.json();
+    })
+    .then((data) => {
+      // Handle API response if needed
+      if(eventStatus[event.EventId]?.registered)
+      {
+        Swal.fire({
+          icon: 'info',
+          title: 'Registered!',
+          text: `You have already registered for the event "${event.Event}".`,
+          html: `You have already registered for the event "<strong>${event.Event}</strong>".`,
+          });
+      }
+      else
+      {
+        // Display a custom styled alert
+        Swal.fire({
+          icon: 'success',
+          title: 'Registration successful!',
+          text: `You have successfully registered for the event "${event.Event}"!`,
+          html: `You have successfully registered for the event "<strong>${event.Event}</strong>"!`,
         });
-    }
-    else
-    {
-      // Display a custom styled alert
-      Swal.fire({
+        setEventStatus((prev) => ({
+          ...prev,
+          [event.EventId]: {
+            ...prev[event.EventId],
+            ['registered']: !prev[event.EventId]?.registered,
+          },
+        }));
+      }
+      fetchData();
+    })
+    .catch((error) => {
+      console.error('Error notifying API:', error);
+      // Handle error if needed
+      if(eventStatus[event.EventId]?.registered)
+      {
+        Swal.fire({
+          icon: 'error',
+          title: 'Unable to remove registration!',
+          text: `Unable to take back your registration for the event "${event.Event}".`,
+          html: `Unable to take back your registration for the event "<strong>${event.Event}</strong>".`,
+          });
+      }
+      else
+      {
+        // Display a custom styled alert
+        Swal.fire({
+          icon: 'success',
+          title: 'Registration unsuccessful...',
+          text: `We couldn't register you for the event "${event.Event}"...`,
+          html: `We couldn't register you for the event "<strong>${event.Event}</strong>"...`,
+        });
+      }
+    });
+  };
+
+  const handleLike = (event: EventType) => {
+  setLoading(true);
+  // Notify the API
+  const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
+  const requestBody = {
+    studentId: query,
+    eventId: event.EventId,
+    interaction: 'liked',
+    status: !eventStatus[event.EventId]?.liked,
+  };
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // You may need to include additional headers (e.g., authentication token)
+    },
+    body: JSON.stringify(requestBody),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to notify API');
+      }
+      return response.json();
+    })
+    .then((data) => {
+      // Handle API response if needed
+      // Display alert
+      !eventStatus[event.EventId]?.liked
+      ?Swal.fire({
         icon: 'success',
-        title: 'Registration successful!',
-        text: `You have successfully registered for the event "${event.Event}"!`,
-        html: `You have successfully registered for the event "<strong>${event.Event}</strong>"!`,
+        title: 'Liked!',
+        text: `You have liked the event ${event.Event}!`,
+        html: `You have liked the event "<strong>${event.Event}</strong>"!`,
+      })
+      :Swal.fire({
+        icon: 'error',
+        title: 'Unliked!',
+        text: `Like for event ${event.Event} has been removed...`,
+        html: `Like for event "<strong>${event.Event}</strong>" has been removed...`,
       });
+      // Your logic for handling 'like' button click
       setEventStatus((prev) => ({
         ...prev,
         [event.EventId]: {
           ...prev[event.EventId],
-          ['registered']: !prev[event.EventId]?.registered,
+          ['liked']: !prev[event.EventId]?.liked,
         },
       }));
-    }
-  };
-
-  const handleLike = (event: EventType) => {
-    // Display alert
-    !eventStatus[event.EventId]?.liked
-    ?Swal.fire({
-      icon: 'success',
-      title: 'Liked!',
-      text: `You have liked the event ${event.Event}!`,
-      html: `You have liked the event "<strong>${event.Event}</strong>"!`,
+      fetchData();
     })
-    :Swal.fire({
-      icon: 'error',
-      title: 'Unliked!',
-      text: `Like for event ${event.Event} has been removed...`,
-      html: `Like for event "<strong>${event.Event}</strong>" has been removed...`,
+    .catch((error) => {
+      console.error('Error notifying API:', error);
+      // Handle error if needed
+      // Display alert
+      !eventStatus[event.EventId]?.liked
+      ?Swal.fire({
+        icon: 'error',
+        title: 'Unable to like...',
+        text: `Your like couldn't be registered for the event ${event.Event}...`,
+        html: `Your like couldn't be registered for the event "<strong>${event.Event}</strong>"...`,
+      })
+      :Swal.fire({
+        icon: 'error',
+        title: 'Unable to unlike...',
+        text: `Like for event ${event.Event} couldn't be removed...`,
+        html: `Like for event "<strong>${event.Event}</strong>" couldn't  be removed...`,
+      });
     });
-    // Your logic for handling 'like' button click
-    setEventStatus((prev) => ({
-      ...prev,
-      [event.EventId]: {
-        ...prev[event.EventId],
-        ['liked']: !prev[event.EventId]?.liked,
-      },
-    }));
   };
 
   const handleReminder = (event: EventType) => {
-    // Display alert
-    !eventStatus[event.EventId]?.remind
-    ?Swal.fire({
-      icon: 'success',
-      title: 'Reminder set!',
-      text: `We will remind you about the event ${event.Event} on ${event.EventDate}.`,
-      html: `We will remind you about the event "<strong>${event.Event}</strong>" on <strong>${event.EventDate}</strong>.`,
+  setLoading(true);
+  // Notify the API
+  const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
+  const requestBody = {
+    studentId: query,
+    eventId: event.EventId,
+    interaction: 'remind',
+    status: !eventStatus[event.EventId]?.remind,
+  };
+
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // You may need to include additional headers (e.g., authentication token)
+    },
+    body: JSON.stringify(requestBody),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to notify API');
+      }
+      return response.json();
     })
-    :Swal.fire({
-      icon: 'warning',
-      title: 'Reminder removed!',
-      text: `Reminder for event ${event.Event} has been removed....`,
-      html: `Reminder for event "<strong>${event.Event}</strong>" has been removed....`,
+    .then((data) => {
+      // Handle API response if needed
+      // Display alert
+      !eventStatus[event.EventId]?.remind
+      ?Swal.fire({
+        icon: 'success',
+        title: 'Reminder set!',
+        text: `We will remind you about the event ${event.Event} on ${event.EventDate}.`,
+        html: `We will remind you about the event "<strong>${event.Event}</strong>" on <strong>${event.EventDate}</strong>.`,
+      })
+      :Swal.fire({
+        icon: 'warning',
+        title: 'Reminder removed!',
+        text: `Reminder for event ${event.Event} has been removed....`,
+        html: `Reminder for event "<strong>${event.Event}</strong>" has been removed....`,
+      });
+      // Your logic for handling 'like' button click
+      setEventStatus((prev) => ({
+        ...prev,
+        [event.EventId]: {
+          ...prev[event.EventId],
+          ['remind']: !prev[event.EventId]?.remind,
+        },
+      }));
+      fetchData();
+    })
+    .catch((error) => {
+      console.error('Error notifying API:', error);
+      // Handle error if needed
+      // Display alert
+      !eventStatus[event.EventId]?.remind
+      ?Swal.fire({
+        icon: 'error',
+        title: 'Reminder not set!',
+        text: `We weren't able to set the reminder for the event ${event.Event}.`,
+        html: `We weren't able to set the reminder for the event "<strong>${event.Event}</strong>".`,
+      })
+      :Swal.fire({
+        icon: 'error',
+        title: "Reminder couldn't be removed!",
+        text: `Reminder for event ${event.Event} coudn't be removed....`,
+        html: `Reminder for event "<strong>${event.Event}</strong>" couldn't be removed....`,
+      });
     });
-    // Your logic for handling 'like' button click
-    setEventStatus((prev) => ({
-      ...prev,
-      [event.EventId]: {
-        ...prev[event.EventId],
-        ['remind']: !prev[event.EventId]?.remind,
-      },
-    }));
   };
 
   const handleBookmark = (event: EventType) => {
-    // Display alert
-    !eventStatus[event.EventId]?.bookmarked
-    ?Swal.fire({
-      icon: 'info',
-      title: 'Bookmarked!',
-      text: `Event ${event.Event} has been bookmarked.`,
-      html: `Event "<strong>${event.Event}</strong>" has been bookmarked.`,
-    })
-    :Swal.fire({
-      icon: 'warning',
-      title: 'Oh no..',
-      text: `Bookmark for event ${event.Event} has been removed...`,
-      html: `Bookmark for event "<strong>${event.Event}</strong>" has been removed...`,
-    });
-    // Your logic for handling 'bookmark' button click
-    setEventStatus((prev) => ({
-      ...prev,
-      [event.EventId]: {
-        ...prev[event.EventId],
-        ['bookmarked']: !prev[event.EventId]?.bookmarked,
-      },
-    }));
+  setLoading(true);
+  // Notify the API
+  const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
+  const requestBody = {
+    studentId: query,
+    eventId: event.EventId,
+    interaction: 'bookmarked',
+    status: !eventStatus[event.EventId]?.bookmarked,
   };
 
-  const steps = [
-    { title: 'Personal Info', details: 'Step details here', color: 'green' },
-    { title: 'Account Info', details: 'Step details here', color: 'gray' },
-    { title: 'Review', details: 'Step details here', color: 'gray' },
-    { title: 'Confirmation', details: 'Step details here', color: 'gray' },
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (currentStep < steps.length - 1) {
-        setCurrentStep((prevStep) => prevStep + 1);
-      } else {
-        clearInterval(interval);
-        setLoading(false);
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // You may need to include additional headers (e.g., authentication token)
+    },
+    body: JSON.stringify(requestBody),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Failed to notify API');
       }
-    }, 1000); // Interval in milliseconds
-    return () => clearInterval(interval);
-  }, [currentStep, steps.length]);
+      return response.json();
+    })
+    .then((data) => {
+      // Handle API response if needed
+      // Display alert
+      !eventStatus[event.EventId]?.bookmarked
+      ?Swal.fire({
+        icon: 'info',
+        title: 'Bookmarked!',
+        text: `Event ${event.Event} has been bookmarked.`,
+        html: `Event "<strong>${event.Event}</strong>" has been bookmarked.`,
+      })
+      :Swal.fire({
+        icon: 'warning',
+        title: 'Oh no..',
+        text: `Bookmark for event ${event.Event} has been removed...`,
+        html: `Bookmark for event "<strong>${event.Event}</strong>" has been removed...`,
+      });
+      // Your logic for handling 'bookmark' button click
+      setEventStatus((prev) => ({
+        ...prev,
+        [event.EventId]: {
+          ...prev[event.EventId],
+          ['bookmarked']: !prev[event.EventId]?.bookmarked,
+        },
+      }));
+      fetchData();
+    })
+    .catch((error) => {
+      console.error('Error notifying bookmark API:', error);
+      // Handle error if needed
+      !eventStatus[event.EventId]?.bookmarked
+      ?Swal.fire({
+        icon: 'error',
+        title: 'Unable to bookmark...',
+        text: `Event ${event.Event} couldn't be bookmarked.`,
+        html: `Event "<strong>${event.Event}</strong>" coudn't be bookmarked.`,
+      })
+      :Swal.fire({
+        icon: 'error',
+        title: 'Oh no..',
+        text: `Bookmark for event ${event.Event} coundn't be removed...`,
+        html: `Bookmark for event "<strong>${event.Event}</strong>" coudn't be removed...`,
+      });
+    });
+  };
 
-  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true); // Set loading state to true
-    // Simulating a simple API request using the Fetch API
+  const fetchData = async () => {
     try {
+      // Your data fetching logic here
       const response = await fetch(`http://127.0.0.1:8000/spider/crawl?id=${query}`);
       const data = await response.json();
       setResult(data);
+
+      let temp = {};
+      //FIXME Make this one GET request instead of multiple
+      for (let record in data) {
+        const result = await fetch(
+          `http://127.0.0.1:8000/event/interaction/get?sid=${query}&eid=${data[record].EventId}`
+        );
+        const dict = await result.json();
+        temp[data[record].EventId] = dict;
+      }
+      setEventStatus(temp);
     } catch (error) {
       console.error('Error fetching data:', error);
       setResult(null);
     } finally {
-      setLoading(false); // Set loading state to false after the request completes
+      setLoading(false);
     }
+  };
+
+  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true); // Set loading state to true
+    fetchData();
     // Hide the popover after form submission
     setPopoverVisible(false);
   };
@@ -244,29 +426,27 @@ const Home: React.FC = () => {
           </div>
         </form>
         {/* Loading Section */}
-        {isLoading && (
-          <ol className="relative text-gray-500 border-s border-gray-200 dark:border-gray-700 dark:text-gray-400">
-            {steps.map((step, index) => (
-              <li key={index} className={`mb-10 ms-6 ${index <= currentStep ? 'text-' + step.color : 'text-gray-500'}`}>
-                <span
-                  className={`absolute flex items-center justify-center w-8 h-8 bg-${step.color}-100 rounded-full -start-4 ring-4 ring-white dark:ring-gray-900 dark:bg-${step.color}-700`}
-                >
-                  <svg
-                    className={`w-3.5 h-3.5 text-${step.color}-500 dark:text-${step.color}-400`}
-                    aria-hidden="true"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 16 12"
-                  >
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M1 5.917 5.724 10.5 15 1.5"/>
-                  </svg>
-                </span>
-                <h3 className="font-medium leading-tight">{step.title}</h3>
-                <p className="text-sm">{step.details}</p>
-              </li>
-            ))}
-          </ol>
-        )}
+        {isLoading && 
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-800 dark:bg-gray-900 opacity-50">
+          <svg
+            aria-hidden="true"
+            className="w-16 h-16 text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
+            viewBox="0 0 100 101"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="currentColor"
+            />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span className="text-white-200 dark:text-white-600 ml-4 text-lg">Loading...</span>
+        </div>
+        }
          {result !== null && !isLoading &&(
           Object.keys(result).length != 1?(
             <ol className="relative my-8 border-s border-gray-200 dark:border-gray-700">
@@ -358,6 +538,10 @@ const Home: React.FC = () => {
                   <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
                     Event ID: {event.EventId}
                   </div>
+                </div>
+                {/* Display score at the bottom right */}
+                <div className="absolute right-8 mb-2 mr-2 text-lg font-semibold text-gray-900 dark:text-white">
+                  Score: {event.score}
                 </div>
                 <a
                   href="#"

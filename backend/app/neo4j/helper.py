@@ -257,7 +257,9 @@ def studentEventSim(session,studentId,eventId,**kwargs):
     rating={}
     #Get the DIRECT and INDIRECT ratings
     for record in result:
-        rating[record["r"].type]=float(record["r"]["rating"])
+        rating[record["r"].type]=record["r"]
+    score+=0 if not('DIRECT' in rating.keys()) else float(rating['DIRECT']['rating'])/10 if 'rating' in rating['DIRECT'].keys() else 0
+    score+=0 if not('INDIRECT' in rating.keys()) else float(rating['INDIRECT']['rating'])/10 if 'rating' in rating['INDIRECT'].keys() else 0
     #FIXME For now, just have INDIRECT rating equal to DIRECT rating
     #FIXME Person is interested in the club that hosted this event
     r1 = """MATCH path = (n:Event {EventId:$eventId})-[:ATTENDED]-(o:Student {StudentId:$studentId}) RETURN n.Topics as event_topics,  o.Topics  as student_topics"""
@@ -279,14 +281,14 @@ def studentEventSim(session,studentId,eventId,**kwargs):
                 sim = calculate_weighted_similarity(student_topic, club_topics)
             else:
                 sim = 0
-        score+= sim
+        score= (score+ sim)/2
     records1 = list(result1) 
     if records1:
         for record in records1:
             event_topics = ast.literal_eval(record["event_topics"])
             student_topics = ast.literal_eval(record["student_topics"])
             sim = calculate_weighted_similarity(student_topics, event_topics)
-    return (score+(rating["INDIRECT"]+rating["DIRECT"])/10)/4  #Return the average rating
+    return score/3  #Return the average rating
 
 def studentClubSim(session,studentId,clubId,**kwargs):
     #Check if club and student IDs are valid IDs
@@ -332,7 +334,7 @@ def studentClubSim(session,studentId,clubId,**kwargs):
             club_topics = ast.literal_eval(record["club_topics"])
             student_topics = ast.literal_eval(record["student_topics"])
             sim = calculate_weighted_similarity(student_topics, club_topics)
-            score += sim / 2
+            score = (score+sim) / 2
     else:
         pass    #OPTIMIZE
     return score/3
@@ -415,6 +417,27 @@ def analyzeMetapathsNeighbourhood(session,studentId):
             RETURN n
             """
         session.run(query,studentId=root['StudentId'])
+
+def fetchInteractions(session,studentId:str,eventId:str):
+    query="""
+    MATCH (s:Student {StudentId:$studentId}), (e:Event {EventId:$eventId})
+    RETURN s,e
+    """
+    result=session.run(query,studentId=studentId,eventId=eventId).single()
+    if result is None:
+        return None
+    query="""
+    MATCH (s:Student {StudentId:$studentId})-[r:INDIRECT]-(e:Event {EventId:$eventId})
+    RETURN r.liked as liked,r.remind as remind,r.bookmarked as bookmarked,r.registered as registered
+    """
+    result=session.run(query,studentId=studentId,eventId=eventId).single()
+    if result is None:
+        return {'liked':False,'remind':False,'bookmarked':False,'registered':False}
+    return {'liked':False if result['liked'] is None else result['liked'],
+            'remind':False if result['remind'] is None else result['remind'],
+            'bookmarked':False if result['bookmarked'] is None else result['bookmarked'],
+            'registered':False if result['registered'] is None else result['registered']
+            }
 
 def main():
     try:
