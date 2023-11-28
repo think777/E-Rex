@@ -95,5 +95,5 @@ student_nodes = session.run("MATCH (s:Student) RETURN s")
 # Loop through each Student node and create relationships with clubs
 for record in student_nodes:
         student_node = record["s"]
-        create_relationships_with_clubs(session, student_node)
-        #create_relationships_with_events(session, student_node)
+        #create_relationships_with_clubs(session, student_node)
+        create_relationships_with_events(session, student_node)
