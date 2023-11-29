@@ -10,19 +10,20 @@ import Row from './components/Row';
 const Home: React.FC = () => {
 
   type EventType = {
-    EventDate: string;
-    EventDuration: string;
-    EventType: string[];
-    PrizePool: string;
+    "Event Date": string;
+    //EventDuration: string;
+    Keywords: string[];
+    "Prize Pool": string;
     Event: string;
-    EventId: string;
-    EventRating: string;
-    ClubId: string;
-    EventDescription: string;
+    EventID: string;
+    "Event Organizer": string;
+    Description: string;
+    Campus:string;
     score: number;
   };
 
   const [query, setQuery] = useState<string>('');
+  const [isSticky, setIsSticky] = useState(false);
   const [result, setResult] = useState<EventType[]|null>(null);
   const [isPopoverVisible, setPopoverVisible] = useState(false);
   const [isLoading, setLoading] = useState<boolean>(false);
@@ -33,7 +34,7 @@ const Home: React.FC = () => {
     }
   
     return result.reduce((acc, event) => {
-      acc[event.EventId] = { liked: false, bookmarked: false, remind: false, registered: false }; // Initialize status for each event
+      acc[event.EventID] = { liked: false, bookmarked: false, remind: false, registered: false }; // Initialize status for each event
       return acc;
     }, {});
   });
@@ -46,9 +47,9 @@ const Home: React.FC = () => {
   const apiUrl = 'http://127.0.0.1:8000/event/interaction/set'; // Replace with your actual API endpoint
   const requestBody = {
     studentId: query,
-    eventId: event.EventId,
+    eventId: event.EventID,
     interaction: 'registered',
-    status: !eventStatus[event.EventId]?.registered,
+    status: !eventStatus[event.EventID]?.registered,
   };
 
   fetch(apiUrl, {
@@ -67,13 +68,13 @@ const Home: React.FC = () => {
     })
     .then((data) => {
       // Handle API response if needed
-      if(eventStatus[event.EventId]?.registered)
+      if(eventStatus[event.EventID]?.registered)
       {
         Swal.fire({
           icon: 'info',
-          title: 'Registered!',
-          text: `You have already registered for the event "${event.Event}".`,
-          html: `You have already registered for the event "<strong>${event.Event}</strong>".`,
+          title: 'Registration removed...',
+          text: `We have taken back your registration for the event "${event.Event}".`,
+          html: `We have taken back your registration for the event "<strong>${event.Event}</strong>".`,
           });
       }
       else
@@ -87,9 +88,9 @@ const Home: React.FC = () => {
         });
         setEventStatus((prev) => ({
           ...prev,
-          [event.EventId]: {
-            ...prev[event.EventId],
-            ['registered']: !prev[event.EventId]?.registered,
+          [event.EventID]: {
+            ...prev[event.EventID],
+            ['registered']: !prev[event.EventID]?.registered,
           },
         }));
       }
@@ -98,7 +99,7 @@ const Home: React.FC = () => {
     .catch((error) => {
       console.error('Error notifying API:', error);
       // Handle error if needed
-      if(eventStatus[event.EventId]?.registered)
+      if(eventStatus[event.EventID]?.registered)
       {
         Swal.fire({
           icon: 'error',
@@ -126,9 +127,9 @@ const Home: React.FC = () => {
   const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
   const requestBody = {
     studentId: query,
-    eventId: event.EventId,
+    eventId: event.EventID,
     interaction: 'liked',
-    status: !eventStatus[event.EventId]?.liked,
+    status: !eventStatus[event.EventID]?.liked,
   };
   fetch(apiUrl, {
     method: 'POST',
@@ -147,7 +148,7 @@ const Home: React.FC = () => {
     .then((data) => {
       // Handle API response if needed
       // Display alert
-      !eventStatus[event.EventId]?.liked
+      !eventStatus[event.EventID]?.liked
       ?Swal.fire({
         icon: 'success',
         title: 'Liked!',
@@ -163,9 +164,9 @@ const Home: React.FC = () => {
       // Your logic for handling 'like' button click
       setEventStatus((prev) => ({
         ...prev,
-        [event.EventId]: {
-          ...prev[event.EventId],
-          ['liked']: !prev[event.EventId]?.liked,
+        [event.EventID]: {
+          ...prev[event.EventID],
+          ['liked']: !prev[event.EventID]?.liked,
         },
       }));
       fetchData();
@@ -174,7 +175,7 @@ const Home: React.FC = () => {
       console.error('Error notifying API:', error);
       // Handle error if needed
       // Display alert
-      !eventStatus[event.EventId]?.liked
+      !eventStatus[event.EventID]?.liked
       ?Swal.fire({
         icon: 'error',
         title: 'Unable to like...',
@@ -196,9 +197,9 @@ const Home: React.FC = () => {
   const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
   const requestBody = {
     studentId: query,
-    eventId: event.EventId,
+    eventId: event.EventID,
     interaction: 'remind',
-    status: !eventStatus[event.EventId]?.remind,
+    status: !eventStatus[event.EventID]?.remind,
   };
 
   fetch(apiUrl, {
@@ -218,12 +219,12 @@ const Home: React.FC = () => {
     .then((data) => {
       // Handle API response if needed
       // Display alert
-      !eventStatus[event.EventId]?.remind
+      !eventStatus[event.EventID]?.remind
       ?Swal.fire({
         icon: 'success',
         title: 'Reminder set!',
-        text: `We will remind you about the event ${event.Event} on ${event.EventDate}.`,
-        html: `We will remind you about the event "<strong>${event.Event}</strong>" on <strong>${event.EventDate}</strong>.`,
+        text: `We will remind you about the event ${event.Event} on ${event["Event Date"]}.`,
+        html: `We will remind you about the event "<strong>${event.Event}</strong>" on <strong>${event["Event Date"]}</strong>.`,
       })
       :Swal.fire({
         icon: 'warning',
@@ -234,9 +235,9 @@ const Home: React.FC = () => {
       // Your logic for handling 'like' button click
       setEventStatus((prev) => ({
         ...prev,
-        [event.EventId]: {
-          ...prev[event.EventId],
-          ['remind']: !prev[event.EventId]?.remind,
+        [event.EventID]: {
+          ...prev[event.EventID],
+          ['remind']: !prev[event.EventID]?.remind,
         },
       }));
       fetchData();
@@ -245,7 +246,7 @@ const Home: React.FC = () => {
       console.error('Error notifying API:', error);
       // Handle error if needed
       // Display alert
-      !eventStatus[event.EventId]?.remind
+      !eventStatus[event.EventID]?.remind
       ?Swal.fire({
         icon: 'error',
         title: 'Reminder not set!',
@@ -267,9 +268,9 @@ const Home: React.FC = () => {
   const apiUrl = 'http://127.0.0.1:8000/event/interaction/set';
   const requestBody = {
     studentId: query,
-    eventId: event.EventId,
+    eventId: event.EventID,
     interaction: 'bookmarked',
-    status: !eventStatus[event.EventId]?.bookmarked,
+    status: !eventStatus[event.EventID]?.bookmarked,
   };
 
   fetch(apiUrl, {
@@ -289,7 +290,7 @@ const Home: React.FC = () => {
     .then((data) => {
       // Handle API response if needed
       // Display alert
-      !eventStatus[event.EventId]?.bookmarked
+      !eventStatus[event.EventID]?.bookmarked
       ?Swal.fire({
         icon: 'info',
         title: 'Bookmarked!',
@@ -305,9 +306,9 @@ const Home: React.FC = () => {
       // Your logic for handling 'bookmark' button click
       setEventStatus((prev) => ({
         ...prev,
-        [event.EventId]: {
-          ...prev[event.EventId],
-          ['bookmarked']: !prev[event.EventId]?.bookmarked,
+        [event.EventID]: {
+          ...prev[event.EventID],
+          ['bookmarked']: !prev[event.EventID]?.bookmarked,
         },
       }));
       fetchData();
@@ -315,7 +316,7 @@ const Home: React.FC = () => {
     .catch((error) => {
       console.error('Error notifying bookmark API:', error);
       // Handle error if needed
-      !eventStatus[event.EventId]?.bookmarked
+      !eventStatus[event.EventID]?.bookmarked
       ?Swal.fire({
         icon: 'error',
         title: 'Unable to bookmark...',
@@ -334,7 +335,7 @@ const Home: React.FC = () => {
   const fetchData = async () => {
     try {
       // Your data fetching logic here
-      const response = await fetch(`http://127.0.0.1:8000/spider/crawl?id=${query}`);
+      const response = await fetch(`http://127.0.0.1:8000/spider/crawl?nodeId=${query}`);
       const data = await response.json();
       setResult(data);
 
@@ -342,10 +343,10 @@ const Home: React.FC = () => {
       //FIXME Make this one GET request instead of multiple
       for (let record in data) {
         const result = await fetch(
-          `http://127.0.0.1:8000/event/interaction/get?sid=${query}&eid=${data[record].EventId}`
+          `http://127.0.0.1:8000/event/interaction/get?sid=${query}&eid=${data[record].EventID}`
         );
         const dict = await result.json();
-        temp[data[record].EventId] = dict;
+        temp[data[record].EventID] = dict;
       }
       setEventStatus(temp);
     } catch (error) {
@@ -363,6 +364,20 @@ const Home: React.FC = () => {
     // Hide the popover after form submission
     setPopoverVisible(false);
   };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const offset = window.scrollY;
+      setIsSticky(offset > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
   return (
     <div className="container mx-auto p-4">
       <h1>Enter the student's ID</h1>
@@ -425,6 +440,10 @@ const Home: React.FC = () => {
             )}
           </div>
         </form>
+        <div className={`transition-all ${isSticky ? 'fixed top-0 left-0 w-full shadow-md z-50' : ''}`}>
+          {/* Your sticky component content goes here */}
+          <p className="p-4">This is a sticky component!</p>
+        </div>
         {/* Loading Section */}
         {isLoading && 
         <div className="fixed inset-0 flex items-center justify-center bg-gray-800 dark:bg-gray-900 opacity-50">
@@ -467,7 +486,7 @@ const Home: React.FC = () => {
                   <span className="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-2.5 py-0.5 rounded dark:bg-blue-900 dark:text-blue-300 ms-3">Latest</span>
                 </h3>
                 <time className="block mb-2 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                  Released on {event.EventDate}
+                  Released on {event["Event Date"]}
                 </time>
               </div>
                 <div className="flex items-center space-x-2 ml-auto">
@@ -476,7 +495,7 @@ const Home: React.FC = () => {
                     className="flex items-center space-x-2 px-3 py-1"
                     onClick={() => handleLike(event)}
                   >
-                    {eventStatus[event.EventId]?.liked
+                    {eventStatus[event.EventID]?.liked
                     ?<svg className="h-6 w-6 text-red-500 opacity-75 hover:scale-125 hover:opacity-100"  fill="red" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                     </svg>
@@ -491,7 +510,7 @@ const Home: React.FC = () => {
                     className="flex items-center space-x-2 px-3 py-1"
                     onClick={() => handleReminder(event)}
                   >
-                    {eventStatus[event.EventId]?.remind
+                    {eventStatus[event.EventID]?.remind
                     ?<svg className="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 20 20">
                       <path d="M15.133 10.632v-1.8a5.406 5.406 0 0 0-4.154-5.262.955.955 0 0 0 .021-.106V1.1a1 1 0 0 0-2 0v2.364a.946.946 0 0 0 .021.106 5.406 5.406 0 0 0-4.154 5.262v1.8C4.867 13.018 3 13.614 3 14.807 3 15.4 3 16 3.538 16h12.924C17 16 17 15.4 17 14.807c0-1.193-1.867-1.789-1.867-4.175ZM4 4a1 1 0 0 1-.707-.293l-1-1a1 1 0 0 1 1.414-1.414l1 1A1 1 0 0 1 4 4ZM2 8H1a1 1 0 0 1 0-2h1a1 1 0 1 1 0 2Zm14-4a1 1 0 0 1-.707-1.707l1-1a1 1 0 1 1 1.414 1.414l-1 1A1 1 0 0 1 16 4Zm3 4h-1a1 1 0 1 1 0-2h1a1 1 0 1 1 0 2ZM6.823 17a3.453 3.453 0 0 0 6.354 0H6.823Z"></path>
                     </svg>
@@ -506,7 +525,7 @@ const Home: React.FC = () => {
                     className="flex items-center space-x-2 px-3 py-1"
                     onClick={() => handleBookmark(event)}
                   >
-                    {eventStatus[event.EventId]?.bookmarked
+                    {eventStatus[event.EventID]?.bookmarked
                     ?<svg className="w-6 h-6 text-yellow-500 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="yellow" viewBox="0 0 14 20">
                     <path d="M13 20a1 1 0 0 1-.64-.231L7 15.3l-5.36 4.469A1 1 0 0 1 0 19V2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v17a1 1 0 0 1-1 1Z"></path>
                 </svg>
@@ -516,27 +535,21 @@ const Home: React.FC = () => {
                   </button>
                 </div>
                 </div>
-                <p className="mb-4 text-base font-normal text-gray-500 dark:text-gray-400">{event.EventDescription}</p>
+                <p className="mb-4 text-base font-normal text-gray-500 dark:text-gray-400">{event.Description}</p>
         
                 {/* Showcase other event attributes in the timeline */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Event Duration: {event.EventDuration} minutes
+                    Prize Pool: ${event["Prize Pool"]}
                   </div>
                   <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Prize Pool: ${event.PrizePool}
+                    Event Type: {Array.isArray(event.Keywords) ? event.Keywords.join(', ') : event.Keywords}
                   </div>
                   <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Event Type: {Array.isArray(event.EventType) ? event.EventType.join(', ') : event.EventType}
+                    Club ID: {event["Event Organizer"]}
                   </div>
                   <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Event Rating: {event.EventRating}
-                  </div>
-                  <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Club ID: {event.ClubId}
-                  </div>
-                  <div className="mb-4 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">
-                    Event ID: {event.EventId}
+                    Event ID: {event.EventID}
                   </div>
                 </div>
                 {/* Display score at the bottom right */}
@@ -547,12 +560,12 @@ const Home: React.FC = () => {
                   href="#"
                   onClick={() => handleRegistration(event)}
                   className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg ${
-                    eventStatus[event.EventId]?.registered
+                    eventStatus[event.EventID]?.registered
                       ? 'bg-green-500 text-white border border-green-800 hover:bg-green-600 focus:ring-green-300'
                       : 'text-gray-900 bg-white border border-gray-200 hover:bg-gray-100 focus:z-10 focus:ring-4 focus:outline-none focus:ring-gray-200'
                   } dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-gray-700`}
                 >
-                  {eventStatus[event.EventId]?.registered ? (
+                  {eventStatus[event.EventID]?.registered ? (
                     <>
                       <svg className="w-6 h-6 text-green-500 dark:text-green" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 21 21">
                         <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m6.072 10.072 2 2 6-4m3.586 4.314.9-.9a2 2 0 0 0 0-2.828l-.9-.9a2 2 0 0 1-.586-1.414V5.072a2 2 0 0 0-2-2H13.8a2 2 0 0 1-1.414-.586l-.9-.9a2 2 0 0 0-2.828 0l-.9.9a2 2 0 0 1-1.414.586H5.072a2 2 0 0 0-2 2v1.272a2 2 0 0 1-.586 1.414l-.9.9a2 2 0 0 0 0 2.828l.9.9a2 2 0 0 1 .586 1.414v1.272a2 2 0 0 0 2 2h1.272a2 2 0 0 1 1.414.586l.9.9a2 2 0 0 0 2.828 0l.9-.9a2 2 0 0 1 1.414-.586h1.272a2 2 0 0 0 2-2V13.8a2 2 0 0 1 .586-1.414Z"></path>
