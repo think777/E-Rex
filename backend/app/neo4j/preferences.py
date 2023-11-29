@@ -14,9 +14,9 @@ session=driver.session()
 def clubpref(session,student_node):
     #print(student_node)
     result = session.run(
-    "MATCH (s:Student {StudentId: $student_id})-[]->(c:Club) "
+    "MATCH (s:Student {StudentID: $student_id})-[:MEMBER_OF]->(c:Club) "
     "RETURN c",
-    student_id=student_node["StudentId"].strip(),
+    student_id=student_node["StudentID"].strip(),
     )
 
     clubs_attributes = [record["c"] for record in result]
@@ -31,14 +31,36 @@ def clubpref(session,student_node):
     for club in clubs_attributes:
         for attribute_key, attribute_value in club.items():
             # Skip 'Club' attribute, 'ClubDescription', and attributes that have None values
-            if attribute_key != 'Club' and attribute_key != 'ClubDescription' and attribute_value is not None:
-                # Count the occurrences of each value for the attribute
-                value_counts = attribute_value_counts.get(attribute_key, {})
-                value_counts[attribute_value] = value_counts.get(attribute_value, 0) + 1
-                attribute_value_counts[attribute_key] = value_counts
+            if attribute_key != 'Club' and attribute_key != 'ClubDescription' and attribute_key != 'Topics' and attribute_value is not None:
+                try:
+                    # Attempt to convert the string representation of a list to an actual list
+                    value_list = ast.literal_eval(attribute_value)
+                    if isinstance(value_list, list):
+                        # If the conversion is successful and it's a list, iterate through the values
+                        for value in value_list:
+                            # Count the occurrences of each value for the attribute
+                            value_counts = attribute_value_counts.get(attribute_key, {})
+                            value_counts[value] = value_counts.get(value, 0) + 1
+                            attribute_value_counts[attribute_key] = value_counts
 
-                # Count the total occurrences for each attribute
-                attribute_total_counts[attribute_key] = attribute_total_counts.get(attribute_key, 0) + 1
+                            # Count the total occurrences for each attribute
+                            attribute_total_counts[attribute_key] = attribute_total_counts.get(attribute_key, 0) + 1
+                    else:
+                        # If the conversion is not a list, process it as a single value
+                        value_counts = attribute_value_counts.get(attribute_key, {})
+                        value_counts[attribute_value] = value_counts.get(attribute_value, 0) + 1
+                        attribute_value_counts[attribute_key] = value_counts
+
+                        # Count the total occurrences for each attribute
+                        attribute_total_counts[attribute_key] = attribute_total_counts.get(attribute_key, 0) + 1
+                except (ValueError, SyntaxError):
+                    # Handle the case where the conversion fails, process the value as a single value
+                    value_counts = attribute_value_counts.get(attribute_key, {})
+                    value_counts[attribute_value] = value_counts.get(attribute_value, 0) + 1
+                    attribute_value_counts[attribute_key] = value_counts
+
+                    # Count the total occurrences for each attribute
+                    attribute_total_counts[attribute_key] = attribute_total_counts.get(attribute_key, 0) + 1
     
     # Initialize a dictionary to store the attribute details
     club_details = {}
@@ -82,18 +104,18 @@ def clubpref(session,student_node):
     nested_data_json = json.dumps(club_details)
 
     session.run(
-    "MATCH  (s:Student {StudentId: $student_id}) "
-    "SET s.ClubDetails = $club_details",
+    "MATCH  (s:Student {StudentID: $student_id}) "
+    "SET s.ClubProfile = $club_details",
     club_details=nested_data_json,
-    student_id=student_node["StudentId"].strip(),
+    student_id=student_node["StudentID"].strip(),
     )
 
         
 def eventpref(session,student_node):
     result = session.run(
-    "MATCH (s:Student {StudentId: $student_id})-[]->(e:Event) "
+    "MATCH (s:Student {StudentID: $student_id})-[:ATTENDED]->(e:Event) "
     "RETURN e",
-    student_id=student_node["StudentId"].strip(),
+    student_id=student_node["StudentID"].strip(),
     )
     clubs_attributes = [record["e"] for record in result]
 
@@ -107,7 +129,7 @@ def eventpref(session,student_node):
     for club in clubs_attributes:
         for attribute_key, attribute_value in club.items():
             # Skip 'Club' attribute, 'ClubDescription', and attributes that have None values
-            if attribute_key != 'Event' and attribute_key != 'EventDescription' and attribute_value is not None:
+            if attribute_key != 'Event' and attribute_key != 'Description' and attribute_key != 'Topics' and attribute_value is not None:
                 try:
                     # Attempt to convert the string representation of a list to an actual list
                     value_list = ast.literal_eval(attribute_value)
@@ -162,9 +184,9 @@ def eventpref(session,student_node):
                 # Normalize the count for each attribute value
                 normalized_count = count / total_count
 
-                #print(f"Value: {value}")
-                #print(f"Normalized Count: {normalized_count}")
-                #print(f"Score: {score}")
+                print(f"Value: {value}")
+                print(f"Normalized Count: {normalized_count}")
+                print(f"Score: {score}")
 
             # Initialize a dictionary to store details for the current attribute
             attribute_info = {
@@ -180,22 +202,16 @@ def eventpref(session,student_node):
     nested_data_json = json.dumps(event_details)
 
     session.run(
-    "MATCH  (s:Student {StudentId: $student_id}) "
-    "SET s.EventDetails = $event_details",
+    "MATCH  (s:Student {StudentID: $student_id}) "
+    "SET s.EventProfile = $event_details",
     event_details=nested_data_json,
-    student_id=student_node["StudentId"].strip(),
+    student_id=student_node["StudentID"].strip(),
     )
 
 
 
-
-
-
-
-
-
 # Retrieve all Student nodes
-student_nodes = session.run("MATCH (s:Student {StudentId: '1'}) RETURN s")
+student_nodes = session.run("MATCH (s:Student {StudentID: 'S2'}) RETURN s")
 # Loop through each Student node and create relationships with clubs
 for record in student_nodes:
         student_node = record["s"]
